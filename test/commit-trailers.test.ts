@@ -52,7 +52,7 @@ function createGitRepo(): GitRepo {
     cwd,
     hooksDirectory,
     run(script, model = MODEL, env = createIsolatedEnvironment()) {
-      const wrapped = wrapExecCommand(script, repo.hooksDirectory, model, OPENCLAW_VERSION);
+      const wrapped = wrapExecCommand(script, repo.hooksDirectory, model, OPENCLAW_VERSION, env);
       return execFileSync("bash", ["-lc", `set -euo pipefail\n${wrapped}`], {
         cwd,
         encoding: "utf8",
@@ -100,19 +100,18 @@ git log -1 --format=%B
     });
   });
 
-  it("attributes nested and amended commits without duplicate trailers", () => {
+  it("attributes chained and amended commits without duplicate trailers", () => {
     withGitRepo((repo) => {
       const output = repo.run(`
 echo one > a.txt
-git add a.txt
-sh -c 'git commit -q -m "nested subject"'
+git add a.txt && git commit -q -m "chained subject"
 echo two >> a.txt
 git add a.txt
 git commit -q --amend --no-edit
 git log -1 --format=%B
 `);
 
-      expect(output).toContain("nested subject");
+      expect(output).toContain("chained subject");
       expect(countOccurrences(output, CO_AUTHOR)).toBe(1);
       expect(countOccurrences(output, GENERATED_BY)).toBe(1);
     });
@@ -208,6 +207,31 @@ git log -1 --format=%B
     });
     expect(buildCommitTrailers("Bad\u0000Model", "1").coAuthor).toContain("Bad Model");
     expect(buildCommitTrailers("", "1").coAuthor).toContain("unknown via OpenClaw");
+  });
+
+  it("leaves unrelated commands and malformed inherited Git config unchanged", () => {
+    const hooksDirectory = createCommitHookDirectory();
+    try {
+      expect(wrapExecCommand("echo ok", hooksDirectory, MODEL, OPENCLAW_VERSION)).toBe("echo ok");
+      for (const invalidCount of ["invalid", "x1", "1x", "1e2", " 1"]) {
+        expect(
+          wrapExecCommand("git commit -m test", hooksDirectory, MODEL, OPENCLAW_VERSION, {
+            GIT_CONFIG_COUNT: invalidCount,
+          }),
+        ).toBe("git commit -m test");
+      }
+      const multiDigit = wrapExecCommand(
+        "git commit -m test",
+        hooksDirectory,
+        MODEL,
+        OPENCLAW_VERSION,
+        { GIT_CONFIG_COUNT: "12" },
+      );
+      expect(multiDigit).toContain("GIT_CONFIG_KEY_12='core.hooksPath'");
+      expect(multiDigit).toContain("GIT_CONFIG_COUNT='13'");
+    } finally {
+      removeCommitHookDirectory(hooksDirectory);
+    }
   });
 
   it("removes an already-missing hook directory", () => {

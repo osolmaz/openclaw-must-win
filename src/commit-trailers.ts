@@ -1,6 +1,7 @@
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { prefixGitCommitCommands } from "./git-commit-command.js";
 
 const CO_AUTHOR_TRAILER = "Co-Authored-By";
 const GENERATED_BY_TRAILER = "Generated-By";
@@ -41,9 +42,15 @@ export function wrapExecCommand(
   hooksDirectory: string,
   model: string,
   openClawVersion: string,
+  environment: NodeJS.ProcessEnv = process.env,
 ): string {
+  const configIndex = readGitConfigCount(environment);
+  if (configIndex === undefined) {
+    return command;
+  }
   const trailers = buildCommitTrailers(model, openClawVersion);
-  return `${buildEnvironmentPrefix(hooksDirectory, trailers)}\n${command}`;
+  const prefix = buildEnvironmentPrefix(hooksDirectory, trailers, configIndex);
+  return prefixGitCommitCommands(command, prefix);
 }
 
 function sanitizeTrailerValue(value: string): string {
@@ -55,15 +62,32 @@ function sanitizeTrailerValue(value: string): string {
   return sanitized || FALLBACK_VALUE;
 }
 
-function buildEnvironmentPrefix(hooksDirectory: string, trailers: CommitTrailers): string {
-  return `__openclaw_must_win_git_config_index="\${GIT_CONFIG_COUNT:-0}"
-export OPENCLAW_MUST_WIN_GIT_CONFIG_INDEX="$__openclaw_must_win_git_config_index"
-export OPENCLAW_MUST_WIN_CO_AUTHOR=${shellQuote(trailers.coAuthor)}
-export OPENCLAW_MUST_WIN_GENERATED_BY=${shellQuote(trailers.generatedBy)}
-export "GIT_CONFIG_KEY_\${__openclaw_must_win_git_config_index}=core.hooksPath"
-export "GIT_CONFIG_VALUE_\${__openclaw_must_win_git_config_index}=${escapeDoubleQuotedAssignmentValue(hooksDirectory)}"
-export GIT_CONFIG_COUNT="$((__openclaw_must_win_git_config_index + 1))"
-unset __openclaw_must_win_git_config_index`;
+function buildEnvironmentPrefix(
+  hooksDirectory: string,
+  trailers: CommitTrailers,
+  configIndex: number,
+): string {
+  const assignments: readonly (readonly [string, string])[] = [
+    ["OPENCLAW_MUST_WIN_GIT_CONFIG_INDEX", String(configIndex)],
+    ["OPENCLAW_MUST_WIN_CO_AUTHOR", trailers.coAuthor],
+    ["OPENCLAW_MUST_WIN_GENERATED_BY", trailers.generatedBy],
+    [`GIT_CONFIG_KEY_${String(configIndex)}`, "core.hooksPath"],
+    [`GIT_CONFIG_VALUE_${String(configIndex)}`, hooksDirectory],
+    ["GIT_CONFIG_COUNT", String(configIndex + 1)],
+  ];
+  return `${assignments.map(([name, value]) => `${name}=${shellQuote(value)}`).join(" ")} `;
+}
+
+function readGitConfigCount(environment: NodeJS.ProcessEnv): number | undefined {
+  const rawCount = environment["GIT_CONFIG_COUNT"];
+  if (rawCount === undefined) {
+    return 0;
+  }
+  if (!/^\d+$/.test(rawCount)) {
+    return undefined;
+  }
+  const count = Number(rawCount);
+  return Number.isSafeInteger(count) ? count : undefined;
 }
 
 function buildPrepareCommitMessageHook(): string {
@@ -95,8 +119,4 @@ fi
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
-}
-
-function escapeDoubleQuotedAssignmentValue(value: string): string {
-  return value.replace(/[\\"$`]/g, "\\$&");
 }

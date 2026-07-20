@@ -20,6 +20,10 @@ Gateway stops.
 - Node.js 22.19 or newer
 - Git
 
+Attribution requires the Gateway exec host with `security: "full"` and `ask: "off"` in both OpenClaw
+config and the local exec approvals file. The plugin leaves commands unchanged in allowlist,
+approval-required, sandbox, node, and automatic host modes.
+
 ## Install
 
 Choose a tag from the [releases page](https://github.com/osolmaz/openclaw-must-win/releases), then
@@ -48,6 +52,11 @@ openclaw plugins inspect openclaw-must-win --runtime --json
 Attribution applies only when Git runs inside OpenClaw's `exec` tool. Commits made in another
 terminal are untouched. A separate agent harness that runs Git outside `exec` also remains
 untouched.
+
+The plugin recognizes direct `git commit` commands, including commands in shell chains and calls
+through an absolute Git path. It does not rewrite nested shell strings or dynamic command names.
+This keeps OpenClaw's allowlist analysis focused on the original Git command. Restrictive exec
+policies are never weakened or made noisier to add attribution.
 
 The plugin recognizes the model reported by OpenClaw for the active run. If OpenClaw has not
 reported a model, it leaves the command unchanged and does not write a co-author.

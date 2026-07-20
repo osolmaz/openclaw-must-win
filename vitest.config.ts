@@ -6,6 +6,8 @@ export default defineConfig({
       include: [
         "src/commit-attribution.ts",
         "src/commit-trailers.ts",
+        "src/exec-policy.ts",
+        "src/git-commit-command.ts",
         "src/model-attribution.ts",
         "src/tool-attribution.ts",
       ],

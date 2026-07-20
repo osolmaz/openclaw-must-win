@@ -1,5 +1,6 @@
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { CommitAttribution } from "./commit-attribution.js";
+import { canAttributeExec, readApprovalPolicy } from "./exec-policy.js";
 import { ModelAttribution } from "./model-attribution.js";
 import { rewriteExecToolCall } from "./tool-attribution.js";
 
@@ -21,13 +22,24 @@ const plugin: ReturnType<typeof definePluginEntry> = definePluginEntry({
     });
 
     api.on("before_tool_call", (event, context) => {
+      if (
+        event.toolName !== "exec" ||
+        event.toolKind === "code_mode_exec" ||
+        !canAttributeExec({
+          agentId: context.agentId,
+          approvalPolicy: readApprovalPolicy(context.agentId),
+          config: api.config,
+          params: event.params,
+        })
+      ) {
+        return undefined;
+      }
       const runId = event.runId ?? context.runId;
       return rewriteExecToolCall(
         {
           params: event.params,
           ...(runId === undefined ? {} : { runId }),
           ...(context.sessionKey === undefined ? {} : { sessionKey: context.sessionKey }),
-          ...(event.toolKind === undefined ? {} : { toolKind: event.toolKind }),
           toolName: event.toolName,
         },
         models,
