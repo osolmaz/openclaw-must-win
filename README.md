@@ -11,8 +11,9 @@ Generated-By: OpenClaw 2026.6.11
 ```
 
 The plugin does not change repository or global Git configuration. It uses a temporary Git hook for
-each running Gateway, delegates to existing repository hooks, and removes its hook files when the
-Gateway stops.
+each running Gateway and delegates to existing repository hooks. The temporary hook stays in the
+operating system's temporary directory so delayed background commands can still use it after a
+Gateway restart. Normal temporary-file cleanup removes it later.
 
 ## Requirements
 

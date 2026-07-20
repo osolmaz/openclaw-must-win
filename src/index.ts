@@ -53,7 +53,6 @@ const plugin: ReturnType<typeof definePluginEntry> = definePluginEntry({
     });
 
     api.on("gateway_stop", () => {
-      commits.stop();
       models.clear();
     });
   },
