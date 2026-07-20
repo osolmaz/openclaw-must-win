@@ -122,7 +122,10 @@ function findGitCommitInsertion(command: string, span: Span): number | undefined
   if (commandIndex === undefined || !isGitCommand(tokens[commandIndex])) {
     return undefined;
   }
-  if (hasGitConfigAssignment(tokens, commandIndex)) {
+  if (
+    hasGitConfigAssignment(tokens, commandIndex) ||
+    hasExplicitHooksPathOption(tokens, commandIndex + 1)
+  ) {
     return undefined;
   }
   const subcommand = findGitSubcommand(tokens, commandIndex + 1);
@@ -282,6 +285,10 @@ function hasGitConfigAssignment(tokens: Token[], commandIndex: number): boolean 
     const name = ASSIGNMENT_PATTERN.exec(token.value)?.[1];
     return name === "GIT_CONFIG_COUNT" || name?.startsWith("GIT_CONFIG_KEY_") === true;
   });
+}
+
+function hasExplicitHooksPathOption(tokens: Token[], start: number): boolean {
+  return tokens.slice(start).some((token) => token.value.toLowerCase().includes("core.hookspath"));
 }
 
 function findGitSubcommand(tokens: Token[], start: number): Token | undefined {

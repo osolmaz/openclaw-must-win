@@ -33,6 +33,9 @@ describe("prefixGitCommitCommands", () => {
     "$(command -v git) commit -m dynamic",
     "GIT_CONFIG_COUNT=2 git commit -m configured",
     "GIT_CONFIG_KEY_0=x git commit -m configured",
+    "git -c core.hooksPath=custom-hooks commit -m configured",
+    "git -ccore.hooksPath=custom-hooks commit -m configured",
+    "git --config-env=core.hooksPath=HOOKS commit -m configured",
     "# git commit -m comment",
     "git commitish -m nope",
   ])("leaves unsupported or non-commit command unchanged: %s", (command) => {

@@ -262,6 +262,7 @@ describe("Git attribution edge cases", () => {
   it("removes an already-missing hook directory", () => {
     const hooksDirectory = createCommitHookDirectory();
     removeCommitHookDirectory(hooksDirectory);
+    expect(existsSync(hooksDirectory)).toBe(false);
     expect(() => {
       removeCommitHookDirectory(hooksDirectory);
       removeCommitHookDirectory(undefined);

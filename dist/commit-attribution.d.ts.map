@@ -1,1 +1,1 @@
-{"version":3,"file":"commit-attribution.d.ts","sourceRoot":"","sources":["../src/commit-attribution.ts"],"names":[],"mappings":"AAEA,qBAAa,iBAAiB;IAC5B,OAAO,CAAC,cAAc,CAAqB;IAE3C,IAAI,CAAC,OAAO,EAAE,MAAM,EAAE,KAAK,EAAE,MAAM,EAAE,eAAe,EAAE,MAAM,GAAG,MAAM;CAItE"}
+{"version":3,"file":"commit-attribution.d.ts","sourceRoot":"","sources":["../src/commit-attribution.ts"],"names":[],"mappings":"AAIA,qBAAa,iBAAiB;IAC5B,OAAO,CAAC,cAAc,CAAqB;IAE3C,IAAI,CAAC,OAAO,EAAE,MAAM,EAAE,KAAK,EAAE,MAAM,EAAE,eAAe,EAAE,MAAM,GAAG,MAAM;CAStE"}
