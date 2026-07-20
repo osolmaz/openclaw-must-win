@@ -1,0 +1,80 @@
+{
+  "name": "openclaw-must-win",
+  "version": "0.1.0",
+  "description": "Attribute Git commits created through OpenClaw to the active model and OpenClaw runtime.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Onur Solmaz",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/osolmaz/openclaw-must-win.git"
+  },
+  "homepage": "https://github.com/osolmaz/openclaw-must-win#readme",
+  "bugs": {
+    "url": "https://github.com/osolmaz/openclaw-must-win/issues"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "openclaw.plugin.json",
+    "README.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "check": "npm run format && npm run lint && npm run typecheck && npm run test && npm run coverage && npm run build && npm run pack:check && npm run slophammer",
+    "clean": "rm -rf coverage dist .stryker-tmp",
+    "coverage": "vitest run --coverage",
+    "dry": "slophammer-ts dry .",
+    "format": "prettier --check .",
+    "format:write": "prettier --write .",
+    "lint": "eslint .",
+    "mutate": "stryker run",
+    "pack:check": "npm pack --dry-run",
+    "prepack": "npm run build",
+    "slophammer": "slophammer-ts check .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.6.11"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@stryker-mutator/core": "9.6.1",
+    "@stryker-mutator/typescript-checker": "9.6.1",
+    "@stryker-mutator/vitest-runner": "9.6.1",
+    "@types/node": "24.1.0",
+    "@vitest/coverage-v8": "4.1.10",
+    "eslint": "10.7.0",
+    "openclaw": "2026.6.11",
+    "prettier": "3.9.5",
+    "slophammer-ts": "0.4.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.64.0",
+    "vitest": "4.1.10"
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.6.11",
+      "minGatewayVersion": "2026.6.11"
+    },
+    "build": {
+      "openclawVersion": "2026.6.11",
+      "pluginSdkVersion": "2026.6.11"
+    }
+  }
+}

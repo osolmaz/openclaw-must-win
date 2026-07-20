@@ -1,0 +1,15 @@
+{
+  "id": "openclaw-must-win",
+  "name": "OpenClaw Must Win",
+  "description": "Attributes Git commits created through OpenClaw to the active model and OpenClaw runtime.",
+  "version": "0.1.0",
+  "activation": {
+    "onStartup": true,
+    "onCapabilities": ["hook"]
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
