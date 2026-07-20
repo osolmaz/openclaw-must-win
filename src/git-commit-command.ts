@@ -36,7 +36,7 @@ export function prefixGitCommitCommands(command: string, prefix: string): string
 }
 
 function findInsertionPoints(command: string): number[] {
-  if (hasUnquotedHereDocument(command)) {
+  if (hasUnquotedHereDocument(command) || hasUnquotedCommandSubstitution(command)) {
     return [];
   }
   return findCommandSegments(command)
@@ -62,6 +62,26 @@ function hasUnquotedHereDocument(command: string): boolean {
       state.quote === "none" &&
       character === "<" &&
       command[index + 1] === "<"
+    ) {
+      return true;
+    }
+    state = advanceScanState(state, character);
+  }
+  return false;
+}
+
+function hasUnquotedCommandSubstitution(command: string): boolean {
+  let state: ScanState = { escaped: false, quote: "none" };
+  for (let index = 0; index < command.length; index += 1) {
+    const character = command[index];
+    if (character === undefined) {
+      continue;
+    }
+    if (
+      !state.escaped &&
+      state.quote === "none" &&
+      character === "$" &&
+      command[index + 1] === "("
     ) {
       return true;
     }

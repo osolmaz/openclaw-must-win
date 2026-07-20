@@ -87,7 +87,21 @@ function canAttributeWithReadableSession(
   );
   const host = resolveHost(input.params["host"], input.sessionExec, agentExec, globalExec);
 
-  return host === "gateway" && isFullAccess(configured) && isFullAccess(input.approvalPolicy);
+  return isAttributionAllowed(host, configured, input.approvalPolicy, input.params["ask"]);
+}
+
+function isAttributionAllowed(
+  host: ExecLayer["host"],
+  configured: ApprovalPolicy,
+  approvals: ApprovalPolicy,
+  requestedAsk: unknown,
+): boolean {
+  return (
+    host === "gateway" &&
+    isFullAccess(configured) &&
+    isFullAccess(approvals) &&
+    isPerCallApprovalDisabled(requestedAsk)
+  );
 }
 
 function resolveHost(
@@ -103,6 +117,10 @@ function resolveHost(
     globalExec?.host ??
     "auto"
   );
+}
+
+function isPerCallApprovalDisabled(value: unknown): boolean {
+  return value === undefined || value === "off";
 }
 
 function isFullAccess(policy: ApprovalPolicy): boolean {

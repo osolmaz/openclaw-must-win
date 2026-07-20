@@ -137,6 +137,8 @@ describe("canAttributeExec", () => {
     };
     expect(canAttribute(config, FULL_APPROVALS, { host: "node" })).toBe(false);
     expect(canAttribute(config, FULL_APPROVALS, { host: "gateway" })).toBe(true);
+    expect(canAttribute(config, FULL_APPROVALS, { ask: "always", host: "gateway" })).toBe(false);
+    expect(canAttribute(config, FULL_APPROVALS, { ask: "off", host: "gateway" })).toBe(true);
     expect(canAttribute({}, FULL_APPROVALS, { host: "invalid" })).toBe(false);
   });
 });

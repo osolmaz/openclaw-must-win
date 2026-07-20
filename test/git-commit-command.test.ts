@@ -64,6 +64,16 @@ describe("prefixGitCommitCommands", () => {
     );
   });
 
+  it("does not rewrite nested command substitutions", () => {
+    const nested = "result=$(true; git commit -m nested)";
+    expect(prefixGitCommitCommands(nested, PREFIX)).toBe(nested);
+
+    const quotedData = "echo '$(git commit -m data)' && git commit -m real";
+    expect(prefixGitCommitCommands(quotedData, PREFIX)).toBe(
+      "echo '$(git commit -m data)' && ATTR=1 git commit -m real",
+    );
+  });
+
   it("does not treat an unterminated quoted token as a command", () => {
     const command = "echo ok && 'git commit -m broken";
     expect(prefixGitCommitCommands(command, PREFIX)).toBe(command);

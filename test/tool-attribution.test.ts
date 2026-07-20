@@ -50,6 +50,46 @@ describe("rewriteExecToolCall", () => {
   });
 
   it.each([
+    { GIT_CONFIG_COUNT: "1" },
+    { GIT_CONFIG_KEY_0: "user.name" },
+    { GIT_CONFIG_VALUE_0: "Agent" },
+    { GIT_CONFIG_KEY_0: "user.name", OTHER: "value" },
+  ])("does not rewrite exec env Git configuration %#", (env) => {
+    const commits = createRecorder();
+    const models = new ModelAttribution();
+    models.record({ model: "model", runId: "run" });
+
+    const result = rewriteExecToolCall(
+      { params: { command: "git commit -m test", env }, runId: "run", toolName: "exec" },
+      models,
+      commits,
+      VERSION,
+    );
+
+    expect(result).toBeUndefined();
+    expect(commits.wrap).not.toHaveBeenCalled();
+  });
+
+  it("rewrites commands with unrelated exec environment variables", () => {
+    const commits = createRecorder();
+    const models = new ModelAttribution();
+    models.record({ model: "model", runId: "run" });
+
+    const result = rewriteExecToolCall(
+      {
+        params: { command: "git commit -m test", env: { OTHER: "value" } },
+        runId: "run",
+        toolName: "exec",
+      },
+      models,
+      commits,
+      VERSION,
+    );
+
+    expect(result?.params["command"]).toBe("wrapped\ngit commit -m test");
+  });
+
+  it.each([
     {
       call: { params: { command: "git status" }, runId: "run", toolName: "read" },
       label: "other tools",
@@ -68,6 +108,18 @@ describe("rewriteExecToolCall", () => {
     {
       call: { params: { command: 42 }, runId: "run", toolName: "exec" },
       label: "non-string commands",
+      recordModel: true,
+    },
+    {
+      call: {
+        params: {
+          command: "git commit -m test",
+          env: { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "user.name" },
+        },
+        runId: "run",
+        toolName: "exec",
+      },
+      label: "per-call Git configuration",
       recordModel: true,
     },
     {

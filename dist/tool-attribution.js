@@ -3,7 +3,7 @@ export function rewriteExecToolCall(call, models, commits, openClawVersion) {
         return undefined;
     }
     const command = call.params["command"];
-    if (typeof command !== "string") {
+    if (typeof command !== "string" || hasGitConfigEnvironment(call.params["env"])) {
         return undefined;
     }
     const model = models.resolve({ runId: call.runId, sessionKey: call.sessionKey });
@@ -16,5 +16,13 @@ export function rewriteExecToolCall(call, models, commits, openClawVersion) {
             command: commits.wrap(command, model, openClawVersion),
         },
     };
+}
+function hasGitConfigEnvironment(value) {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+        return false;
+    }
+    return Object.keys(value).some((key) => key === "GIT_CONFIG_COUNT" ||
+        key.startsWith("GIT_CONFIG_KEY_") ||
+        key.startsWith("GIT_CONFIG_VALUE_"));
 }
 //# sourceMappingURL=tool-attribution.js.map

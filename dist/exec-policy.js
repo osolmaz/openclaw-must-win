@@ -43,7 +43,13 @@ function canAttributeWithReadableSession(input) {
         ?.exec;
     const configured = applyLayer(applyLayer(applyLayer({ ask: "off", security: "full" }, globalExec), agentExec), input.sessionExec);
     const host = resolveHost(input.params["host"], input.sessionExec, agentExec, globalExec);
-    return host === "gateway" && isFullAccess(configured) && isFullAccess(input.approvalPolicy);
+    return isAttributionAllowed(host, configured, input.approvalPolicy, input.params["ask"]);
+}
+function isAttributionAllowed(host, configured, approvals, requestedAsk) {
+    return (host === "gateway" &&
+        isFullAccess(configured) &&
+        isFullAccess(approvals) &&
+        isPerCallApprovalDisabled(requestedAsk));
 }
 function resolveHost(requestedHost, sessionExec, agentExec, globalExec) {
     return (readRequestedHost(requestedHost) ??
@@ -51,6 +57,9 @@ function resolveHost(requestedHost, sessionExec, agentExec, globalExec) {
         agentExec?.host ??
         globalExec?.host ??
         "auto");
+}
+function isPerCallApprovalDisabled(value) {
+    return value === undefined || value === "off";
 }
 function isFullAccess(policy) {
     return policy.security === "full" && policy.ask === "off";

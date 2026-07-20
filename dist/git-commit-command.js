@@ -19,7 +19,7 @@ export function prefixGitCommitCommands(command, prefix) {
     return rewritten;
 }
 function findInsertionPoints(command) {
-    if (hasUnquotedHereDocument(command)) {
+    if (hasUnquotedHereDocument(command) || hasUnquotedCommandSubstitution(command)) {
         return [];
     }
     return findCommandSegments(command)
@@ -38,6 +38,23 @@ function hasUnquotedHereDocument(command) {
             state.quote === "none" &&
             character === "<" &&
             command[index + 1] === "<") {
+            return true;
+        }
+        state = advanceScanState(state, character);
+    }
+    return false;
+}
+function hasUnquotedCommandSubstitution(command) {
+    let state = { escaped: false, quote: "none" };
+    for (let index = 0; index < command.length; index += 1) {
+        const character = command[index];
+        if (character === undefined) {
+            continue;
+        }
+        if (!state.escaped &&
+            state.quote === "none" &&
+            character === "$" &&
+            command[index + 1] === "(") {
             return true;
         }
         state = advanceScanState(state, character);
