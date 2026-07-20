@@ -46,6 +46,19 @@ describe("prefixGitCommitCommands", () => {
     );
   });
 
+  it("does not rewrite here-document or here-string contents", () => {
+    const heredoc = "cat <<'EOF'\ngit commit -m not-a-command\nEOF\ngit commit -m later";
+    expect(prefixGitCommitCommands(heredoc, PREFIX)).toBe(heredoc);
+
+    const hereString = "cat <<< 'git commit -m data'; git commit -m later";
+    expect(prefixGitCommitCommands(hereString, PREFIX)).toBe(hereString);
+
+    const quotedOperator = "echo '<<' && git commit -m real";
+    expect(prefixGitCommitCommands(quotedOperator, PREFIX)).toBe(
+      "echo '<<' && ATTR=1 git commit -m real",
+    );
+  });
+
   it("does not treat an unterminated quoted token as a command", () => {
     const command = "echo ok && 'git commit -m broken";
     expect(prefixGitCommitCommands(command, PREFIX)).toBe(command);

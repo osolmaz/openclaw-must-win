@@ -130,7 +130,9 @@ git log -1 --format=%B
       expect(countOccurrences(output, GENERATED_BY)).toBe(1);
     });
   });
+});
 
+describe("Git hook delegation", () => {
   it("chains default and configured repository hooks", () => {
     withGitRepo((repo) => {
       const defaultHook = join(repo.cwd, ".git/hooks/prepare-commit-msg");
@@ -157,9 +159,30 @@ git log -1 --format=%B
     });
   });
 
-  it("propagates an existing hook failure", () => {
+  it("delegates commit-msg and post-commit hooks", () => {
     withGitRepo((repo) => {
-      writeFileSync(join(repo.cwd, ".git/hooks/prepare-commit-msg"), "#!/bin/sh\nexit 42\n", {
+      writeFileSync(
+        join(repo.cwd, ".git/hooks/commit-msg"),
+        '#!/bin/sh\nprintf "\\nUser-Hook: commit-msg\\n" >> "$1"\n',
+        { mode: 0o755 },
+      );
+      writeFileSync(
+        join(repo.cwd, ".git/hooks/post-commit"),
+        "#!/bin/sh\ntouch post-commit-ran\n",
+        { mode: 0o755 },
+      );
+
+      const output = repo.run(
+        "echo one > a; git add a; git commit -q -m delegated; git log -1 --format=%B",
+      );
+      expect(output).toContain("User-Hook: commit-msg");
+      expect(existsSync(join(repo.cwd, "post-commit-ran"))).toBe(true);
+    });
+  });
+
+  it("propagates an existing pre-commit hook failure", () => {
+    withGitRepo((repo) => {
+      writeFileSync(join(repo.cwd, ".git/hooks/pre-commit"), "#!/bin/sh\nexit 42\n", {
         mode: 0o755,
       });
 
@@ -199,7 +222,9 @@ git log -1 --format=%B
       );
     });
   });
+});
 
+describe("Git attribution edge cases", () => {
   it("sanitizes empty and unsafe trailer values", () => {
     expect(buildCommitTrailers("Bad\n<Model>", "\n")).toEqual({
       coAuthor: "Co-Authored-By: Bad Model via OpenClaw <noreply@openclaw.ai>",

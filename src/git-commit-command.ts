@@ -16,6 +16,9 @@ type Span = {
 type Quote = "double" | "none" | "single" | "backtick";
 
 export function prefixGitCommitCommands(command: string, prefix: string): string {
+  if (hasUnquotedHereDocument(command)) {
+    return command;
+  }
   const insertionPoints = findCommandSegments(command)
     .map((span) => findGitCommitInsertion(command, span))
     .filter((point): point is number => point !== undefined)
@@ -32,6 +35,26 @@ type ScanState = {
   escaped: boolean;
   quote: Quote;
 };
+
+function hasUnquotedHereDocument(command: string): boolean {
+  let state: ScanState = { escaped: false, quote: "none" };
+  for (let index = 0; index < command.length; index += 1) {
+    const character = command[index];
+    if (character === undefined) {
+      continue;
+    }
+    if (
+      !state.escaped &&
+      state.quote === "none" &&
+      character === "<" &&
+      command[index + 1] === "<"
+    ) {
+      return true;
+    }
+    state = advanceScanState(state, character);
+  }
+  return false;
+}
 
 function findCommandSegments(command: string): Span[] {
   const spans: Span[] = [];

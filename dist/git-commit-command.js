@@ -1,6 +1,9 @@
 const GIT_OPTIONS_WITH_VALUE = new Set(["-C", "-c", "--git-dir", "--namespace", "--work-tree"]);
 const ASSIGNMENT_PATTERN = /^([A-Za-z_][A-Za-z0-9_]*)=/;
 export function prefixGitCommitCommands(command, prefix) {
+    if (hasUnquotedHereDocument(command)) {
+        return command;
+    }
     const insertionPoints = findCommandSegments(command)
         .map((span) => findGitCommitInsertion(command, span))
         .filter((point) => point !== undefined)
@@ -10,6 +13,23 @@ export function prefixGitCommitCommands(command, prefix) {
         rewritten = `${rewritten.slice(0, point)}${prefix}${rewritten.slice(point)}`;
     }
     return rewritten;
+}
+function hasUnquotedHereDocument(command) {
+    let state = { escaped: false, quote: "none" };
+    for (let index = 0; index < command.length; index += 1) {
+        const character = command[index];
+        if (character === undefined) {
+            continue;
+        }
+        if (!state.escaped &&
+            state.quote === "none" &&
+            character === "<" &&
+            command[index + 1] === "<") {
+            return true;
+        }
+        state = advanceScanState(state, character);
+    }
+    return false;
 }
 function findCommandSegments(command) {
     const spans = [];

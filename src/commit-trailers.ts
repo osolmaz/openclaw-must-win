@@ -6,6 +6,32 @@ import { prefixGitCommitCommands } from "./git-commit-command.js";
 const CO_AUTHOR_TRAILER = "Co-Authored-By";
 const GENERATED_BY_TRAILER = "Generated-By";
 const FALLBACK_VALUE = "unknown";
+const GIT_HOOK_NAMES = [
+  "applypatch-msg",
+  "commit-msg",
+  "fsmonitor-watchman",
+  "post-applypatch",
+  "post-checkout",
+  "post-commit",
+  "post-index-change",
+  "post-merge",
+  "post-receive",
+  "post-rewrite",
+  "post-update",
+  "pre-applypatch",
+  "pre-auto-gc",
+  "pre-commit",
+  "pre-merge-commit",
+  "pre-push",
+  "pre-rebase",
+  "pre-receive",
+  "prepare-commit-msg",
+  "proc-receive",
+  "push-to-checkout",
+  "reference-transaction",
+  "sendemail-validate",
+  "update",
+] as const;
 
 export type CommitTrailers = {
   coAuthor: string;
@@ -24,9 +50,12 @@ export function buildCommitTrailers(model: string, openClawVersion: string): Com
 
 export function createCommitHookDirectory(): string {
   const hooksDirectory = mkdtempSync(join(tmpdir(), "openclaw-must-win-hooks-"));
-  const hookPath = join(hooksDirectory, "prepare-commit-msg");
-  writeFileSync(hookPath, buildPrepareCommitMessageHook());
-  chmodSync(hookPath, 0o755);
+  const hook = buildGitHook();
+  for (const hookName of GIT_HOOK_NAMES) {
+    const hookPath = join(hooksDirectory, hookName);
+    writeFileSync(hookPath, hook);
+    chmodSync(hookPath, 0o755);
+  }
   return hooksDirectory;
 }
 
@@ -90,29 +119,31 @@ function readGitConfigCount(environment: NodeJS.ProcessEnv): number | undefined 
   return Number.isSafeInteger(count) ? count : undefined;
 }
 
-function buildPrepareCommitMessageHook(): string {
+function buildGitHook(): string {
   return `#!/bin/sh
 set -eu
 
-message_file="$1"
-
-git \\
-  -c trailer.co-authored-by.ifExists=addIfDifferent \\
-  -c trailer.generated-by.ifExists=replace \\
-  interpret-trailers \\
-  --in-place \\
-  --trailer "$OPENCLAW_MUST_WIN_CO_AUTHOR" \\
-  --trailer "$OPENCLAW_MUST_WIN_GENERATED_BY" \\
-  "$message_file"
+hook_name="\${0##*/}"
+if [ "$hook_name" = "prepare-commit-msg" ]; then
+  message_file="$1"
+  git \\
+    -c trailer.co-authored-by.ifExists=addIfDifferent \\
+    -c trailer.generated-by.ifExists=replace \\
+    interpret-trailers \\
+    --in-place \\
+    --trailer "$OPENCLAW_MUST_WIN_CO_AUTHOR" \\
+    --trailer "$OPENCLAW_MUST_WIN_GENERATED_BY" \\
+    "$message_file"
+fi
 
 __openclaw_config_index="$OPENCLAW_MUST_WIN_GIT_CONFIG_INDEX"
 unset "GIT_CONFIG_KEY_$__openclaw_config_index"
 unset "GIT_CONFIG_VALUE_$__openclaw_config_index"
 export GIT_CONFIG_COUNT="$__openclaw_config_index"
 
-original_hook="$(git rev-parse --git-path hooks/prepare-commit-msg)"
+original_hook="$(git rev-parse --git-path "hooks/$hook_name")"
 if [ -x "$original_hook" ] && [ "$original_hook" != "$0" ]; then
-  "$original_hook" "$@"
+  exec "$original_hook" "$@"
 fi
 `;
 }
