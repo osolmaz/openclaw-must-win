@@ -1,6 +1,6 @@
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { CommitAttribution } from "./commit-attribution.js";
-import { canAttributeExec, readApprovalPolicy } from "./exec-policy.js";
+import { canAttributeExec, readApprovalPolicy, readSessionExecLayer } from "./exec-policy.js";
 import { ModelAttribution } from "./model-attribution.js";
 import { rewriteExecToolCall } from "./tool-attribution.js";
 
@@ -30,6 +30,7 @@ const plugin: ReturnType<typeof definePluginEntry> = definePluginEntry({
           approvalPolicy: readApprovalPolicy(context.agentId),
           config: api.config,
           params: event.params,
+          sessionExec: readSessionExecLayer(context.sessionKey, context.agentId),
         })
       ) {
         return undefined;

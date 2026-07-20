@@ -7,19 +7,25 @@ const GIT_OPTIONS_WITH_VALUE = new Set([
     "--work-tree",
 ]);
 const ASSIGNMENT_PATTERN = /^([A-Za-z_][A-Za-z0-9_]*)=/;
+export function hasAttributableGitCommit(command) {
+    return findInsertionPoints(command).length > 0;
+}
 export function prefixGitCommitCommands(command, prefix) {
-    if (hasUnquotedHereDocument(command)) {
-        return command;
-    }
-    const insertionPoints = findCommandSegments(command)
-        .map((span) => findGitCommitInsertion(command, span))
-        .filter((point) => point !== undefined)
-        .sort((left, right) => right - left);
+    const insertionPoints = findInsertionPoints(command);
     let rewritten = command;
     for (const point of insertionPoints) {
         rewritten = `${rewritten.slice(0, point)}${prefix}${rewritten.slice(point)}`;
     }
     return rewritten;
+}
+function findInsertionPoints(command) {
+    if (hasUnquotedHereDocument(command)) {
+        return [];
+    }
+    return findCommandSegments(command)
+        .map((span) => findGitCommitInsertion(command, span))
+        .filter((point) => point !== undefined)
+        .sort((left, right) => right - left);
 }
 function hasUnquotedHereDocument(command) {
     let state = { escaped: false, quote: "none" };

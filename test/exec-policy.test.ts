@@ -1,6 +1,6 @@
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
-import { describe, expect, it } from "vitest";
-import { canAttributeExec, type ApprovalPolicy } from "../src/exec-policy.js";
+import { describe, expect, it, vi } from "vitest";
+import { canAttributeExec, type ApprovalPolicy, readSessionExecLayer } from "../src/exec-policy.js";
 
 const FULL_APPROVALS: ApprovalPolicy = { ask: "off", security: "full" };
 
@@ -10,8 +10,45 @@ function canAttribute(
   params: Record<string, unknown> = {},
   agentId = "main",
 ): boolean {
-  return canAttributeExec({ agentId, approvalPolicy, config, params });
+  return canAttributeExec({ agentId, approvalPolicy, config, params, sessionExec: undefined });
 }
+
+describe("readSessionExecLayer", () => {
+  it("reads validated session overrides and fails closed on store errors", () => {
+    const get = vi.fn(() => ({
+      execAsk: "always",
+      execHost: "sandbox",
+      execSecurity: "allowlist",
+      sessionId: "id",
+      updatedAt: 1,
+    }));
+
+    expect(readSessionExecLayer("session", "main", { get })).toEqual({
+      ask: "always",
+      host: "sandbox",
+      security: "allowlist",
+    });
+    expect(get).toHaveBeenCalledWith({ agentId: "main", sessionKey: "session" });
+    expect(readSessionExecLayer(undefined, "main", { get })).toBeUndefined();
+    expect(readSessionExecLayer("missing", undefined, { get: () => undefined })).toBeUndefined();
+    expect(
+      readSessionExecLayer("invalid", undefined, {
+        get: () => ({
+          execAsk: "invalid",
+          execHost: "invalid",
+          execSecurity: "invalid",
+          sessionId: "id",
+          updatedAt: 1,
+        }),
+      }),
+    ).toEqual({});
+
+    get.mockImplementation(() => {
+      throw new Error("unreadable");
+    });
+    expect(readSessionExecLayer("session", "main", { get })).toBeNull();
+  });
+});
 
 describe("canAttributeExec", () => {
   it("allows an explicit full-access Gateway policy", () => {
@@ -59,6 +96,39 @@ describe("canAttributeExec", () => {
     };
     expect(canAttribute(config)).toBe(true);
     expect(canAttribute(config, FULL_APPROVALS, {}, "other")).toBe(false);
+  });
+
+  it("applies session policy over agent and global policy", () => {
+    const config: OpenClawConfig = {
+      tools: { exec: { host: "gateway", mode: "full" } },
+    };
+    expect(
+      canAttributeExec({
+        agentId: "main",
+        approvalPolicy: FULL_APPROVALS,
+        config,
+        params: {},
+        sessionExec: { host: "sandbox" },
+      }),
+    ).toBe(false);
+    expect(
+      canAttributeExec({
+        agentId: "main",
+        approvalPolicy: FULL_APPROVALS,
+        config,
+        params: {},
+        sessionExec: { ask: "always" },
+      }),
+    ).toBe(false);
+    expect(
+      canAttributeExec({
+        agentId: "main",
+        approvalPolicy: FULL_APPROVALS,
+        config,
+        params: {},
+        sessionExec: null,
+      }),
+    ).toBe(false);
   });
 
   it("honors a requested host and rejects unknown or missing host policy", () => {

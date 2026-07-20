@@ -22,20 +22,27 @@ type Span = {
 
 type Quote = "double" | "none" | "single" | "backtick";
 
-export function prefixGitCommitCommands(command: string, prefix: string): string {
-  if (hasUnquotedHereDocument(command)) {
-    return command;
-  }
-  const insertionPoints = findCommandSegments(command)
-    .map((span) => findGitCommitInsertion(command, span))
-    .filter((point): point is number => point !== undefined)
-    .sort((left, right) => right - left);
+export function hasAttributableGitCommit(command: string): boolean {
+  return findInsertionPoints(command).length > 0;
+}
 
+export function prefixGitCommitCommands(command: string, prefix: string): string {
+  const insertionPoints = findInsertionPoints(command);
   let rewritten = command;
   for (const point of insertionPoints) {
     rewritten = `${rewritten.slice(0, point)}${prefix}${rewritten.slice(point)}`;
   }
   return rewritten;
+}
+
+function findInsertionPoints(command: string): number[] {
+  if (hasUnquotedHereDocument(command)) {
+    return [];
+  }
+  return findCommandSegments(command)
+    .map((span) => findGitCommitInsertion(command, span))
+    .filter((point): point is number => point !== undefined)
+    .sort((left, right) => right - left);
 }
 
 type ScanState = {

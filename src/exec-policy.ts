@@ -1,4 +1,5 @@
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
+import { getSessionEntry } from "openclaw/plugin-sdk/config-runtime";
 import {
   loadExecApprovals,
   resolveExecApprovalsFromFile,
@@ -22,6 +23,7 @@ export type ExecAttributionPolicyInput = {
   approvalPolicy: ApprovalPolicy;
   config: OpenClawConfig;
   params: Record<string, unknown>;
+  sessionExec: ExecLayer | null | undefined;
 };
 
 export function readApprovalPolicy(agentId: string | undefined): ApprovalPolicy {
@@ -37,25 +39,70 @@ export function readApprovalPolicy(agentId: string | undefined): ApprovalPolicy 
   }
 }
 
+type SessionStoreRuntime = {
+  get: typeof getSessionEntry;
+};
+
+const DEFAULT_SESSION_STORE_RUNTIME: SessionStoreRuntime = {
+  get: getSessionEntry,
+};
+
+export function readSessionExecLayer(
+  sessionKey: string | undefined,
+  agentId: string | undefined,
+  runtime: SessionStoreRuntime = DEFAULT_SESSION_STORE_RUNTIME,
+): ExecLayer | null | undefined {
+  if (sessionKey === undefined) {
+    return undefined;
+  }
+  try {
+    const entry = runtime.get({
+      ...(agentId === undefined ? {} : { agentId }),
+      sessionKey,
+    });
+    return entry === undefined ? undefined : normalizeSessionExecLayer(entry);
+  } catch {
+    return null;
+  }
+}
+
 export function canAttributeExec(input: ExecAttributionPolicyInput): boolean {
+  if (input.sessionExec === null) {
+    return false;
+  }
+  return canAttributeWithReadableSession({ ...input, sessionExec: input.sessionExec });
+}
+
+function canAttributeWithReadableSession(
+  input: Omit<ExecAttributionPolicyInput, "sessionExec"> & {
+    sessionExec: ExecLayer | undefined;
+  },
+): boolean {
   const globalExec = input.config.tools?.exec;
   const agentExec = input.config.agents?.list?.find((agent) => agent.id === input.agentId)?.tools
     ?.exec;
   const configured = applyLayer(
-    applyLayer({ ask: "off", security: "full" }, globalExec),
-    agentExec,
+    applyLayer(applyLayer({ ask: "off", security: "full" }, globalExec), agentExec),
+    input.sessionExec,
   );
-  const host = resolveHost(input.params["host"], agentExec, globalExec);
+  const host = resolveHost(input.params["host"], input.sessionExec, agentExec, globalExec);
 
   return host === "gateway" && isFullAccess(configured) && isFullAccess(input.approvalPolicy);
 }
 
 function resolveHost(
   requestedHost: unknown,
+  sessionExec: ExecLayer | undefined,
   agentExec: ExecLayer | undefined,
   globalExec: ExecLayer | undefined,
 ): ExecLayer["host"] {
-  return readRequestedHost(requestedHost) ?? agentExec?.host ?? globalExec?.host ?? "auto";
+  return (
+    readRequestedHost(requestedHost) ??
+    sessionExec?.host ??
+    agentExec?.host ??
+    globalExec?.host ??
+    "auto"
+  );
 }
 
 function isFullAccess(policy: ApprovalPolicy): boolean {
@@ -70,6 +117,30 @@ function applyLayer(base: ApprovalPolicy, layer: ExecLayer | undefined): Approva
     ask: layer?.ask ?? base.ask,
     security: layer?.security ?? base.security,
   };
+}
+
+function normalizeSessionExecLayer(entry: {
+  execAsk?: string;
+  execHost?: string;
+  execSecurity?: string;
+}): ExecLayer {
+  return {
+    ...(isAsk(entry.execAsk) ? { ask: entry.execAsk } : {}),
+    ...(isHost(entry.execHost) ? { host: entry.execHost } : {}),
+    ...(isSecurity(entry.execSecurity) ? { security: entry.execSecurity } : {}),
+  };
+}
+
+function isAsk(value: unknown): value is NonNullable<ExecLayer["ask"]> {
+  return value === "always" || value === "off" || value === "on-miss";
+}
+
+function isHost(value: unknown): value is NonNullable<ExecLayer["host"]> {
+  return value === "auto" || value === "gateway" || value === "node" || value === "sandbox";
+}
+
+function isSecurity(value: unknown): value is NonNullable<ExecLayer["security"]> {
+  return value === "allowlist" || value === "deny" || value === "full";
 }
 
 function readRequestedHost(value: unknown): ExecLayer["host"] | undefined {
