@@ -1,4 +1,11 @@
-const GIT_OPTIONS_WITH_VALUE = new Set(["-C", "-c", "--git-dir", "--namespace", "--work-tree"]);
+const GIT_OPTIONS_WITH_VALUE = new Set([
+    "-C",
+    "-c",
+    "--config-env",
+    "--git-dir",
+    "--namespace",
+    "--work-tree",
+]);
 const ASSIGNMENT_PATTERN = /^([A-Za-z_][A-Za-z0-9_]*)=/;
 export function prefixGitCommitCommands(command, prefix) {
     if (hasUnquotedHereDocument(command)) {
@@ -223,7 +230,38 @@ function hasGitConfigAssignment(tokens, commandIndex) {
     });
 }
 function hasExplicitHooksPathOption(tokens, start) {
-    return tokens.slice(start).some((token) => token.value.toLowerCase().includes("core.hookspath"));
+    let index = start;
+    while (index < tokens.length) {
+        const token = tokens[index];
+        if (!isStaticGitOption(token)) {
+            return false;
+        }
+        if (isHooksPathOption(tokens, index)) {
+            return true;
+        }
+        index += optionConsumesNextValue(token.value) ? 2 : 1;
+    }
+    return false;
+}
+function isStaticGitOption(token) {
+    return (token !== undefined && !token.dynamic && token.value !== "--" && token.value.startsWith("-"));
+}
+function isHooksPathOption(tokens, index) {
+    const option = tokens[index]?.value ?? "";
+    const lowercaseOption = option.toLowerCase();
+    if (isSeparateConfigOption(option)) {
+        return isHooksPathConfig(tokens[index + 1]?.value ?? "");
+    }
+    if (option.startsWith("-c")) {
+        return isHooksPathConfig(option.slice(2));
+    }
+    return lowercaseOption.startsWith("--config-env=") && isHooksPathConfig(option.slice(13));
+}
+function isSeparateConfigOption(option) {
+    return option === "-c" || option.toLowerCase() === "--config-env";
+}
+function isHooksPathConfig(value) {
+    return value.toLowerCase().startsWith("core.hookspath=");
 }
 function findGitSubcommand(tokens, start) {
     let index = start;

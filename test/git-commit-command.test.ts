@@ -11,6 +11,7 @@ describe("prefixGitCommitCommands", () => {
     ["git -C repo commit -m test", "ATTR=1 git -C repo commit -m test"],
     ["git --git-dir .git commit", "ATTR=1 git --git-dir .git commit"],
     ["git --no-pager commit", "ATTR=1 git --no-pager commit"],
+    ['git commit -m "document core.hooksPath"', 'ATTR=1 git commit -m "document core.hooksPath"'],
     ["git -- commit", "ATTR=1 git -- commit"],
     [
       "echo one && git add a; git commit -m test\ngit status",
@@ -36,6 +37,7 @@ describe("prefixGitCommitCommands", () => {
     "git -c core.hooksPath=custom-hooks commit -m configured",
     "git -ccore.hooksPath=custom-hooks commit -m configured",
     "git --config-env=core.hooksPath=HOOKS commit -m configured",
+    "git --config-env core.hooksPath=HOOKS commit -m configured",
     "# git commit -m comment",
     "git commitish -m nope",
   ])("leaves unsupported or non-commit command unchanged: %s", (command) => {

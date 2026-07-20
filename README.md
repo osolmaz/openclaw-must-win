@@ -20,6 +20,7 @@ Gateway restart. Normal temporary-file cleanup removes it later.
 - OpenClaw 2026.6.11 or newer
 - Node.js 22.19 or newer
 - Git
+- A POSIX Gateway host such as Linux or macOS
 
 Attribution requires the Gateway exec host with `security: "full"` and `ask: "off"` in both OpenClaw
 config and the local exec approvals file. The plugin leaves commands unchanged in allowlist,
@@ -52,7 +53,8 @@ openclaw plugins inspect openclaw-must-win --runtime --json
 
 Attribution applies only when Git runs inside OpenClaw's `exec` tool. Commits made in another
 terminal are untouched. A separate agent harness that runs Git outside `exec` also remains
-untouched.
+untouched. Commands on Windows Gateways are currently left unchanged rather than rewritten with
+POSIX shell syntax.
 
 The plugin recognizes direct `git commit` commands, including commands in shell chains and calls
 through an absolute Git path. It does not rewrite nested shell strings or dynamic command names.
@@ -64,8 +66,9 @@ noisier to add attribution.
 The plugin recognizes the model reported by OpenClaw for the active run. If OpenClaw has not
 reported a model, it leaves the command unchanged and does not write a co-author.
 
-Existing `prepare-commit-msg` hooks still run. If an existing hook rejects the commit, Git keeps the
-same failure behavior.
+Existing Git hooks still run. Message hooks run before attribution is finalized, so their edits are
+preserved without allowing them to erase the trailers. If an existing hook rejects the commit, Git
+keeps the same failure behavior.
 
 ## License
 

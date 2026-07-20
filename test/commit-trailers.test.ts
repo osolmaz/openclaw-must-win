@@ -136,13 +136,18 @@ describe("Git hook delegation", () => {
   it("chains default and configured repository hooks", () => {
     withGitRepo((repo) => {
       const defaultHook = join(repo.cwd, ".git/hooks/prepare-commit-msg");
-      writeFileSync(defaultHook, '#!/bin/sh\nprintf "\\nUser-Hook: default\\n" >> "$1"\n', {
-        mode: 0o755,
-      });
+      writeFileSync(
+        defaultHook,
+        '#!/bin/sh\nprintf "rewritten subject\\n\\nUser-Hook: default\\n" > "$1"\n',
+        { mode: 0o755 },
+      );
       const defaultOutput = repo.run(
         "echo one > a; git add a; git commit -q -m default; git log -1 --format=%B",
       );
+      expect(defaultOutput).toContain("rewritten subject");
       expect(defaultOutput).toContain("User-Hook: default");
+      expect(defaultOutput).toContain(CO_AUTHOR);
+      expect(defaultOutput).toContain(GENERATED_BY);
 
       const customHooks = join(repo.cwd, "custom-hooks");
       mkdirSync(customHooks);
@@ -163,7 +168,7 @@ describe("Git hook delegation", () => {
     withGitRepo((repo) => {
       writeFileSync(
         join(repo.cwd, ".git/hooks/commit-msg"),
-        '#!/bin/sh\nprintf "\\nUser-Hook: commit-msg\\n" >> "$1"\n',
+        '#!/bin/sh\nprintf "rewritten by commit-msg\\n\\nUser-Hook: commit-msg\\n" > "$1"\n',
         { mode: 0o755 },
       );
       writeFileSync(
@@ -175,7 +180,10 @@ describe("Git hook delegation", () => {
       const output = repo.run(
         "echo one > a; git add a; git commit -q -m delegated; git log -1 --format=%B",
       );
+      expect(output).toContain("rewritten by commit-msg");
       expect(output).toContain("User-Hook: commit-msg");
+      expect(output).toContain(CO_AUTHOR);
+      expect(output).toContain(GENERATED_BY);
       expect(existsSync(join(repo.cwd, "post-commit-ran"))).toBe(true);
     });
   });
@@ -238,6 +246,9 @@ describe("Git attribution edge cases", () => {
     const hooksDirectory = createCommitHookDirectory();
     try {
       expect(wrapExecCommand("echo ok", hooksDirectory, MODEL, OPENCLAW_VERSION)).toBe("echo ok");
+      expect(
+        wrapExecCommand("git commit -m test", hooksDirectory, MODEL, OPENCLAW_VERSION, {}, "win32"),
+      ).toBe("git commit -m test");
       for (const invalidCount of ["invalid", "x1", "1x", "1e2", " 1"]) {
         expect(
           wrapExecCommand("git commit -m test", hooksDirectory, MODEL, OPENCLAW_VERSION, {

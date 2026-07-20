@@ -55,7 +55,10 @@ export function removeCommitHookDirectory(hooksDirectory) {
     }
     rmSync(hooksDirectory, { force: true, recursive: true });
 }
-export function wrapExecCommand(command, hooksDirectory, model, openClawVersion, environment = process.env) {
+export function wrapExecCommand(command, hooksDirectory, model, openClawVersion, environment = process.env, platform = process.platform) {
+    if (platform === "win32") {
+        return command;
+    }
     const configIndex = readGitConfigCount(environment);
     if (configIndex === undefined) {
         return command;
@@ -99,7 +102,17 @@ function buildGitHook() {
 set -eu
 
 hook_name="\${0##*/}"
-if [ "$hook_name" = "prepare-commit-msg" ]; then
+__openclaw_config_index="$OPENCLAW_MUST_WIN_GIT_CONFIG_INDEX"
+unset "GIT_CONFIG_KEY_$__openclaw_config_index"
+unset "GIT_CONFIG_VALUE_$__openclaw_config_index"
+export GIT_CONFIG_COUNT="$__openclaw_config_index"
+
+original_hook="$(git rev-parse --git-path "hooks/$hook_name")"
+if [ "$hook_name" = "prepare-commit-msg" ] || [ "$hook_name" = "commit-msg" ]; then
+  if [ -x "$original_hook" ] && [ "$original_hook" != "$0" ]; then
+    "$original_hook" "$@"
+  fi
+
   message_file="$1"
   git \\
     -c trailer.co-authored-by.ifExists=addIfDifferent \\
@@ -109,14 +122,9 @@ if [ "$hook_name" = "prepare-commit-msg" ]; then
     --trailer "$OPENCLAW_MUST_WIN_CO_AUTHOR" \\
     --trailer "$OPENCLAW_MUST_WIN_GENERATED_BY" \\
     "$message_file"
+  exit 0
 fi
 
-__openclaw_config_index="$OPENCLAW_MUST_WIN_GIT_CONFIG_INDEX"
-unset "GIT_CONFIG_KEY_$__openclaw_config_index"
-unset "GIT_CONFIG_VALUE_$__openclaw_config_index"
-export GIT_CONFIG_COUNT="$__openclaw_config_index"
-
-original_hook="$(git rev-parse --git-path "hooks/$hook_name")"
 if [ -x "$original_hook" ] && [ "$original_hook" != "$0" ]; then
   exec "$original_hook" "$@"
 fi
