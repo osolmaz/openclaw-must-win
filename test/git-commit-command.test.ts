@@ -34,6 +34,8 @@ describe("prefixGitCommitCommands", () => {
     "$(command -v git) commit -m dynamic",
     "GIT_CONFIG_COUNT=2 git commit -m configured",
     "GIT_CONFIG_KEY_0=x git commit -m configured",
+    "export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/custom; git commit -m configured",
+    "GIT_CONFIG_PARAMETERS=custom; git commit -m configured",
     "git -c core.hooksPath=custom-hooks commit -m configured",
     "git -ccore.hooksPath=custom-hooks commit -m configured",
     "git --config-env=core.hooksPath=HOOKS commit -m configured",

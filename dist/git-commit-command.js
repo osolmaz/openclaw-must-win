@@ -19,13 +19,21 @@ export function prefixGitCommitCommands(command, prefix) {
     return rewritten;
 }
 function findInsertionPoints(command) {
-    if (hasUnquotedHereDocument(command) || hasUnquotedCommandSubstitution(command)) {
+    if (hasUnquotedHereDocument(command) ||
+        hasUnquotedCommandSubstitution(command) ||
+        hasShellGitConfigAssignment(command)) {
         return [];
     }
     return findCommandSegments(command)
         .map((span) => findGitCommitInsertion(command, span))
         .filter((point) => point !== undefined)
         .sort((left, right) => right - left);
+}
+function hasShellGitConfigAssignment(command) {
+    return findCommandSegments(command).some((span) => tokenizeSegment(command, span).some((token) => {
+        const name = ASSIGNMENT_PATTERN.exec(token.value)?.[1];
+        return name === "GIT_CONFIG" || name?.startsWith("GIT_CONFIG_") === true;
+    }));
 }
 function hasUnquotedHereDocument(command) {
     let state = { escaped: false, quote: "none" };

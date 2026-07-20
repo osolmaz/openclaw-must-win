@@ -59,9 +59,9 @@ POSIX shell syntax.
 The plugin recognizes direct `git commit` commands, including commands in shell chains and calls
 through an absolute Git path. It does not rewrite nested shell strings or dynamic command names.
 Commands that set `core.hooksPath` with a Git command-line option or supply process-local Git
-configuration through the exec environment are also left unchanged. These limits keep OpenClaw's
-approval analysis focused on the original Git command. Restrictive exec policies and per-call
-approval requests are never weakened or made noisier to add attribution.
+configuration through the exec environment or shell assignments are also left unchanged. These
+limits keep OpenClaw's approval analysis focused on the original Git command. Restrictive exec
+policies and per-call approval requests are never weakened or made noisier to add attribution.
 
 The plugin recognizes the model reported by OpenClaw for the active run. If OpenClaw has not
 reported a model, it leaves the command unchanged and does not write a co-author.
