@@ -10,6 +10,7 @@ export type AttributionContext = {
 };
 
 const MAX_TRACKED_RUNS = 1_024;
+const MAX_TRACKED_SESSIONS = 1_024;
 
 export class ModelAttribution {
   private readonly modelsByRun = new Map<string, string>();
@@ -26,6 +27,15 @@ export class ModelAttribution {
     }
     this.modelsByRun.set(call.runId, call.model);
     if (call.sessionKey !== undefined) {
+      if (
+        !this.modelsBySession.has(call.sessionKey) &&
+        this.modelsBySession.size >= MAX_TRACKED_SESSIONS
+      ) {
+        const oldestSessionKey = this.modelsBySession.keys().next().value;
+        if (oldestSessionKey !== undefined) {
+          this.evictSession(oldestSessionKey);
+        }
+      }
       this.modelsBySession.set(call.sessionKey, call.model);
       this.sessionsByRun.set(call.runId, call.sessionKey);
     }
@@ -47,6 +57,10 @@ export class ModelAttribution {
     if (sessionKey === undefined) {
       return;
     }
+    this.evictSession(sessionKey);
+  }
+
+  private evictSession(sessionKey: string): void {
     this.modelsBySession.delete(sessionKey);
     for (const [runId, runSessionKey] of this.sessionsByRun) {
       if (runSessionKey === sessionKey) {

@@ -13,6 +13,15 @@ describe("ModelAttribution", () => {
     expect(models.resolve({ runId: "missing", sessionKey: "session" })).toBe("model-b");
   });
 
+  it("retains multiple sessions below the limit", () => {
+    const models = new ModelAttribution();
+    models.record({ model: "model-a", runId: "run-a", sessionKey: "session-a" });
+    models.record({ model: "model-b", runId: "run-b", sessionKey: "session-b" });
+
+    expect(models.resolve({ sessionKey: "session-a" })).toBe("model-a");
+    expect(models.resolve({ sessionKey: "session-b" })).toBe("model-b");
+  });
+
   it("supports calls without a session and bounds retained runs", () => {
     const models = new ModelAttribution();
     models.record({ model: "model-a", runId: "oldest" });
@@ -23,6 +32,27 @@ describe("ModelAttribution", () => {
 
     expect(models.resolve({ runId: "oldest" })).toBeUndefined();
     expect(models.resolve({ runId: "run-1023" })).toBe("model-1023");
+  });
+
+  it("bounds retained sessions and removes their run links", () => {
+    const models = new ModelAttribution();
+    models.record({ model: "old", runId: "old-run", sessionKey: "old-session" });
+    for (let index = 0; index < 1_023; index += 1) {
+      const suffix = String(index);
+      models.record({
+        model: `model-${suffix}`,
+        runId: `run-${suffix}`,
+        sessionKey: `session-${suffix}`,
+      });
+    }
+    models.record({ model: "fresh", runId: "old-run", sessionKey: "old-session" });
+    expect(models.resolve({ runId: "old-run" })).toBe("fresh");
+
+    models.record({ model: "new", runId: "new-run", sessionKey: "new-session" });
+
+    expect(models.resolve({ sessionKey: "old-session" })).toBeUndefined();
+    expect(models.resolve({ runId: "old-run" })).toBeUndefined();
+    expect(models.resolve({ sessionKey: "new-session" })).toBe("new");
   });
 
   it("clears session and gateway state", () => {

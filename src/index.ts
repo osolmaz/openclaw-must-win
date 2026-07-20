@@ -28,7 +28,7 @@ const plugin: ReturnType<typeof definePluginEntry> = definePluginEntry({
         !canAttributeExec({
           agentId: context.agentId,
           approvalPolicy: readApprovalPolicy(context.agentId),
-          config: api.config,
+          config: api.runtime.config.current(),
           params: event.params,
           sessionExec: readSessionExecLayer(context.sessionKey, context.agentId),
         })

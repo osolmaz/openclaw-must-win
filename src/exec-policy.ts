@@ -1,4 +1,3 @@
-import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import { getSessionEntry } from "openclaw/plugin-sdk/config-runtime";
 import { normalizeAgentId } from "openclaw/plugin-sdk/routing";
 import {
@@ -6,6 +5,16 @@ import {
   resolveExecApprovalsFromFile,
   resolveExecPolicyForMode,
 } from "openclaw/plugin-sdk/infra-runtime";
+
+type ExecConfig = {
+  agents?: {
+    list?: readonly {
+      id: string;
+      tools?: { exec?: ExecLayer };
+    }[];
+  };
+  tools?: { exec?: ExecLayer };
+};
 
 type ExecLayer = {
   ask?: "always" | "off" | "on-miss";
@@ -22,7 +31,7 @@ export type ApprovalPolicy = {
 export type ExecAttributionPolicyInput = {
   agentId?: string | undefined;
   approvalPolicy: ApprovalPolicy;
-  config: OpenClawConfig;
+  config: ExecConfig;
   params: Record<string, unknown>;
   sessionExec: ExecLayer | null | undefined;
 };

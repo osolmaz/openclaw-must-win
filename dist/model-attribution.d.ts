@@ -14,6 +14,7 @@ export declare class ModelAttribution {
     record(call: ModelCall): void;
     resolve(context: AttributionContext): string | undefined;
     endSession(sessionKey: string | undefined): void;
+    private evictSession;
     clear(): void;
 }
 //# sourceMappingURL=model-attribution.d.ts.map
