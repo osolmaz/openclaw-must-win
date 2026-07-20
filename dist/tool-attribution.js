@@ -22,6 +22,7 @@ function hasGitConfigEnvironment(value) {
         return false;
     }
     return Object.keys(value).some((key) => key === "GIT_CONFIG_COUNT" ||
+        key === "GIT_CONFIG_PARAMETERS" ||
         key.startsWith("GIT_CONFIG_KEY_") ||
         key.startsWith("GIT_CONFIG_VALUE_"));
 }

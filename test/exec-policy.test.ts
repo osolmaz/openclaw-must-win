@@ -131,6 +131,17 @@ describe("canAttributeExec", () => {
     ).toBe(false);
   });
 
+  it("normalizes agent IDs before applying agent policy", () => {
+    const config: OpenClawConfig = {
+      agents: {
+        list: [{ id: "BuildBot", tools: { exec: { host: "sandbox", mode: "deny" } } }],
+      },
+      tools: { exec: { host: "gateway", mode: "full" } },
+    };
+
+    expect(canAttribute(config, FULL_APPROVALS, {}, "buildbot")).toBe(false);
+  });
+
   it("honors a requested host and rejects unknown or missing host policy", () => {
     const config: OpenClawConfig = {
       tools: { exec: { host: "gateway", mode: "full" } },

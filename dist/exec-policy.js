@@ -1,4 +1,5 @@
 import { getSessionEntry } from "openclaw/plugin-sdk/config-runtime";
+import { normalizeAgentId } from "openclaw/plugin-sdk/routing";
 import { loadExecApprovals, resolveExecApprovalsFromFile, resolveExecPolicyForMode, } from "openclaw/plugin-sdk/infra-runtime";
 export function readApprovalPolicy(agentId) {
     try {
@@ -39,8 +40,8 @@ export function canAttributeExec(input) {
 }
 function canAttributeWithReadableSession(input) {
     const globalExec = input.config.tools?.exec;
-    const agentExec = input.config.agents?.list?.find((agent) => agent.id === input.agentId)?.tools
-        ?.exec;
+    const agentId = normalizeAgentId(input.agentId);
+    const agentExec = input.config.agents?.list?.find((agent) => normalizeAgentId(agent.id) === agentId)?.tools?.exec;
     const configured = applyLayer(applyLayer(applyLayer({ ask: "off", security: "full" }, globalExec), agentExec), input.sessionExec);
     const host = resolveHost(input.params["host"], input.sessionExec, agentExec, globalExec);
     return isAttributionAllowed(host, configured, input.approvalPolicy, input.params["ask"]);

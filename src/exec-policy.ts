@@ -1,5 +1,6 @@
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import { getSessionEntry } from "openclaw/plugin-sdk/config-runtime";
+import { normalizeAgentId } from "openclaw/plugin-sdk/routing";
 import {
   loadExecApprovals,
   resolveExecApprovalsFromFile,
@@ -79,8 +80,10 @@ function canAttributeWithReadableSession(
   },
 ): boolean {
   const globalExec = input.config.tools?.exec;
-  const agentExec = input.config.agents?.list?.find((agent) => agent.id === input.agentId)?.tools
-    ?.exec;
+  const agentId = normalizeAgentId(input.agentId);
+  const agentExec = input.config.agents?.list?.find(
+    (agent) => normalizeAgentId(agent.id) === agentId,
+  )?.tools?.exec;
   const configured = applyLayer(
     applyLayer(applyLayer({ ask: "off", security: "full" }, globalExec), agentExec),
     input.sessionExec,
