@@ -1,0 +1,24 @@
+typescript:
+  coverage:
+    threshold: 90
+  complexity:
+    max: 8
+  dry:
+    max_findings: 0
+    paths:
+      - src
+    exclude:
+      - "**/*.test.ts"
+    copied_blocks:
+      enabled: true
+      min_tokens: 100
+  mutation:
+    targets:
+      - src/commit-attribution.ts
+      - src/commit-trailers.ts
+      - src/model-attribution.ts
+      - src/tool-attribution.ts
+  dependency_boundaries:
+    - from: src
+      allow:
+        - src
