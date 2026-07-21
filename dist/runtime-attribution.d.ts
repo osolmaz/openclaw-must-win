@@ -9,6 +9,7 @@ export declare class RuntimeAttribution {
     register(): void;
     private recordModel;
     private beforeTool;
+    private ensureStore;
     private resolveModel;
     private writeTicket;
     private afterTool;

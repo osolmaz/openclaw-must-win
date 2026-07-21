@@ -19,7 +19,7 @@ afterEach(() => {
   }
 });
 
-function createApi(config: unknown = {}, pluginConfig: unknown = {}) {
+function createApi(config: unknown = {}, pluginConfig: unknown = {}, startGateway = true) {
   const root = mkdtempSync(join(tmpdir(), "openclaw-must-win-runtime-"));
   roots.push(root);
   process.env["XDG_RUNTIME_DIR"] = root;
@@ -35,7 +35,9 @@ function createApi(config: unknown = {}, pluginConfig: unknown = {}) {
     },
   } as unknown as OpenClawPluginApi;
   new RuntimeAttribution(api).register();
-  callHook(hooks, "gateway_start", {}, {});
+  if (startGateway) {
+    callHook(hooks, "gateway_start", {}, {});
+  }
   return { hooks, root };
 }
 
@@ -88,9 +90,11 @@ describe("RuntimeAttribution", () => {
   });
 
   it("uses configured model fallback and ignores unrelated tools", () => {
-    const { hooks, root } = createApi({
-      agents: { defaults: { model: { primary: "openai/gpt-5.6-sol" } } },
-    });
+    const { hooks, root } = createApi(
+      { agents: { defaults: { model: { primary: "openai/gpt-5.6-sol" } } } },
+      {},
+      false,
+    );
     callHook(
       hooks,
       "before_tool_call",

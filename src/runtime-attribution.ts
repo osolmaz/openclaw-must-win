@@ -75,7 +75,7 @@ export class RuntimeAttribution {
       }
       return undefined;
     }
-    if (this.store === undefined || this.gateway === undefined) {
+    if (!this.ensureStore()) {
       this.api.logger.warn("openclaw-must-win: attribution store is unavailable");
       return undefined;
     }
@@ -87,6 +87,13 @@ export class RuntimeAttribution {
     }
     this.writeTicket(command, model, event, context, runId);
     return undefined;
+  }
+
+  private ensureStore(): boolean {
+    if (this.store === undefined || this.gateway === undefined) {
+      this.start();
+    }
+    return this.store !== undefined && this.gateway !== undefined;
   }
 
   private resolveModel(runId: string | undefined, context: ToolContext): string | undefined {
@@ -142,6 +149,9 @@ export class RuntimeAttribution {
   }
 
   private start(): void {
+    if (this.store !== undefined && this.gateway !== undefined) {
+      return;
+    }
     const identity = process.platform === "linux" ? readProcessIdentity() : undefined;
     if (identity === undefined) {
       return;
