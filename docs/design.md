@@ -5,9 +5,11 @@ OpenClaw core and agent harnesses remain unchanged.
 
 ## Runtime records
 
-The plugin registers the Gateway process when it loads. The record contains the Linux cgroup, boot
-ID, process ID, OpenClaw version, and enforcement mode. A one-minute heartbeat keeps the record
-current.
+The plugin registers the Gateway process when its lifecycle starts. OpenClaw can also instantiate
+plugins in an agent-runtime registry that does not receive `gateway_start`, so the plugin performs
+the same idempotent initialization before that registry's first `exec` call. The record contains the
+Linux cgroup, boot ID, process ID, OpenClaw version, and enforcement mode. A one-minute heartbeat
+keeps the record current.
 
 Each normalized `exec` call creates an execution ticket before the command starts. The ticket
 records the model, run and session identifiers, tool-call identifier, working-directory hint, and a

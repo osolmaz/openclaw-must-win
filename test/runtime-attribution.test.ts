@@ -89,7 +89,7 @@ describe("RuntimeAttribution", () => {
     callHook(hooks, "gateway_stop", {}, {});
   });
 
-  it("uses configured model fallback and ignores unrelated tools", () => {
+  it("starts lazily, accepts code-mode exec, and ignores unrelated tools", () => {
     const { hooks, root } = createApi(
       { agents: { defaults: { model: { primary: "openai/gpt-5.6-sol" } } } },
       {},
@@ -104,7 +104,12 @@ describe("RuntimeAttribution", () => {
     callHook(
       hooks,
       "before_tool_call",
-      { params: { command: "git commit" }, toolCallId: "tool", toolName: "exec" },
+      {
+        params: { command: "git commit" },
+        toolCallId: "tool",
+        toolKind: "code_mode_exec",
+        toolName: "exec",
+      },
       {},
     );
 
