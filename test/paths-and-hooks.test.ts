@@ -24,6 +24,24 @@ describe("attribution paths", () => {
     });
   });
 
+  it("uses dispatcher-pinned directories before process XDG values", () => {
+    const paths = resolveAttributionPaths(
+      {
+        OPENCLAW_MUST_WIN_DATA_DIRECTORY: "/pinned/data",
+        OPENCLAW_MUST_WIN_RUNTIME_DIRECTORY: "/pinned/runtime",
+        OPENCLAW_MUST_WIN_STATE_DIRECTORY: "/pinned/state",
+        XDG_DATA_HOME: "/other/data",
+        XDG_RUNTIME_DIR: "/other/runtime",
+        XDG_STATE_HOME: "/other/state",
+      },
+      "/home/test",
+      1000,
+    );
+    expect(paths.dataDirectory).toBe("/pinned/data");
+    expect(paths.runtimeDirectory).toBe("/pinned/runtime");
+    expect(paths.stateDirectory).toBe("/pinned/state");
+  });
+
   it("falls back to home and uid paths", () => {
     const paths = resolveAttributionPaths({}, "/home/test", 1000);
     expect(paths.dataDirectory).toBe("/home/test/.local/share/openclaw-must-win");

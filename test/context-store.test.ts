@@ -105,12 +105,17 @@ describe("AttributionContextStore", () => {
       reason: "missing",
     });
 
-    store.recordTool({ command: "one", gateway, model: "one", toolCallId: "one" });
-    store.recordTool({ command: "two", gateway, model: "two", toolCallId: "two" });
-    expect(store.resolve(snapshot())).toEqual({
+    store.recordTool({ command: "same", gateway, model: "one", toolCallId: "one" });
+    store.recordTool({ command: "same", gateway, model: "two", toolCallId: "two" });
+    expect(store.resolve(snapshot("same"))).toEqual({
       mode: "required",
       origin: "openclaw",
       reason: "ambiguous",
+    });
+    expect(store.resolve(snapshot("different"))).toEqual({
+      mode: "required",
+      origin: "openclaw",
+      reason: "missing",
     });
   });
 
@@ -127,7 +132,7 @@ describe("AttributionContextStore", () => {
     expect(store.resolve(snapshot())).toEqual({
       mode: "best-effort",
       origin: "openclaw",
-      reason: "ambiguous",
+      reason: "missing",
     });
   });
 

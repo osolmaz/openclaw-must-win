@@ -1,4 +1,5 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -189,11 +190,12 @@ describe("Git dispatcher diagnostics", () => {
         sourceRuntimeDirectory: value.source,
       }),
     ).toThrow();
-    rmSync(value.paths.installStatePath, { force: true });
+    expect(readInstallState(value.paths.installStatePath)).toBeUndefined();
     expect(() => {
       uninstallDispatcher({ gitConfig: value.gitConfig, paths: value.paths });
     }).toThrow("not set up");
     expect(doctorDispatcher({ gitConfig: value.gitConfig, paths: value.paths }).ok).toBe(false);
+    mkdirSync(value.paths.stateDirectory, { recursive: true });
     writeFileSync(value.paths.installStatePath, "invalid json\n", { flag: "w" });
     expect(readInstallState(value.paths.installStatePath)).toBeUndefined();
     for (const invalid of [
@@ -251,6 +253,37 @@ describe("Git dispatcher diagnostics", () => {
       }),
     ).toThrow("write failed");
     expect(current).toBe("/existing/hooks");
+    expect(readInstallState(value.paths.installStatePath)).toBeUndefined();
+  });
+});
+
+describe("Git dispatcher runtime paths", () => {
+  it("pins setup paths in hooks when Git runs with different XDG values", () => {
+    const value = fixture();
+    installDispatcher({
+      gitConfig: value.gitConfig,
+      paths: value.paths,
+      sourceRuntimeDirectory: join(process.cwd(), "dist"),
+    });
+    const repository = join(value.root, "repository");
+    mkdirSync(repository);
+    execFileSync("git", ["init", "-q", repository]);
+    const marker = join(value.root, "repository-hook-ran");
+    const repositoryHook = join(repository, ".git", "hooks", "pre-commit");
+    writeFileSync(repositoryHook, `#!/bin/sh\nprintf ran > '${marker}'\n`);
+    chmodSync(repositoryHook, 0o755);
+
+    execFileSync(join(value.paths.hooksDirectory, "pre-commit"), [], {
+      cwd: repository,
+      env: {
+        ...process.env,
+        XDG_DATA_HOME: join(value.root, "other-data"),
+        XDG_RUNTIME_DIR: join(value.root, "other-runtime"),
+        XDG_STATE_HOME: join(value.root, "other-state"),
+      },
+    });
+
+    expect(readFileSync(marker, "utf8")).toBe("ran");
   });
 
   it("keeps a runtime that is already in its installed location", () => {

@@ -23,17 +23,41 @@ export function resolveAttributionPaths(
     readNonEmpty(environment["XDG_STATE_HOME"]) ?? join(homeDirectory, ".local", "state");
   const runtimeHome =
     readNonEmpty(environment["XDG_RUNTIME_DIR"]) ?? resolveDefaultRuntimeHome(stateHome, uid);
-  const dataDirectory = join(dataHome, "openclaw-must-win");
-  const stateDirectory = join(stateHome, "openclaw-must-win");
+  const dataDirectory = resolvePinnedDirectory(
+    environment,
+    "OPENCLAW_MUST_WIN_DATA_DIRECTORY",
+    join(dataHome, "openclaw-must-win"),
+  );
+  const stateDirectory = resolvePinnedDirectory(
+    environment,
+    "OPENCLAW_MUST_WIN_STATE_DIRECTORY",
+    join(stateHome, "openclaw-must-win"),
+  );
+  const runtimeDirectory = resolvePinnedDirectory(
+    environment,
+    "OPENCLAW_MUST_WIN_RUNTIME_DIRECTORY",
+    join(runtimeHome, "openclaw-must-win"),
+  );
 
   return {
     dataDirectory,
     hooksDirectory: join(dataDirectory, "hooks"),
     installStatePath: join(stateDirectory, "install.json"),
-    runtimeDirectory: join(runtimeHome, "openclaw-must-win"),
+    runtimeDirectory,
     runtimeFilesDirectory: join(dataDirectory, "runtime"),
     stateDirectory,
   };
+}
+
+function resolvePinnedDirectory(
+  environment: NodeJS.ProcessEnv,
+  key:
+    | "OPENCLAW_MUST_WIN_DATA_DIRECTORY"
+    | "OPENCLAW_MUST_WIN_RUNTIME_DIRECTORY"
+    | "OPENCLAW_MUST_WIN_STATE_DIRECTORY",
+  fallback: string,
+): string {
+  return readNonEmpty(environment[key]) ?? fallback;
 }
 
 function readNonEmpty(value: string | undefined): string | undefined {

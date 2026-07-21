@@ -26,9 +26,10 @@ A Git hook reads its own cgroup and boot ID from `/proc`. Terminal processes nor
 different scope from the managed Gateway, so they do not match its records.
 
 For a matching Gateway cgroup, the hook hashes command-line arguments from its process ancestry. It
-prefers one active ticket whose command digest appears in that ancestry. If no digest matches, it
-can select the sole active or retained ticket for the cgroup. Multiple possible tickets are
-ambiguous.
+selects a ticket only when exactly one command digest appears in that ancestry, preferring an active
+ticket over a completed one. A sole ticket without a matching digest is not enough: required mode
+rejects the commit rather than risk attributing it to an unrelated tool call. Multiple matching
+tickets are ambiguous.
 
 Required mode stops message hooks when an OpenClaw process has no unique ticket. Best-effort mode
 delegates existing hooks and continues without attribution. A process outside every registered
@@ -41,8 +42,10 @@ the user's global `core.hooksPath` at it. The command copies the compiled runtim
 directory, so npm cache cleanup or plugin removal does not leave Git calling a transient package
 path.
 
-The setup state stores the previous global hooks path. For each Git hook, the dispatcher runs the
-corresponding hook from that saved path and the repository's default `.git/hooks` directory.
+The setup state stores the previous global hooks path. Installed hook scripts also pin the
+setup-time data, state, and runtime directories, so a Git process with different XDG environment
+values still finds the same state and delegates the same hooks. For each Git hook, the dispatcher
+runs the corresponding hook from the saved path and the repository's default `.git/hooks` directory.
 Duplicate paths are skipped, and any hook failure is returned to Git.
 
 `prepare-commit-msg` and `commit-msg` apply trailers after delegated hooks finish. Reapplying the

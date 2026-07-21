@@ -32,8 +32,8 @@ external attribution method cannot enforce required mode there.
 
 ## Commit refused because context is missing
 
-The Git process matched the Gateway cgroup, but no execution ticket identified the model. Check that
-the plugin is loaded and inspect its diagnostics:
+The Git process matched the Gateway cgroup, but no execution ticket with a matching command digest
+identified the model. Check that the plugin is loaded and inspect its diagnostics:
 
 ```bash
 openclaw plugins inspect openclaw-must-win --runtime --json
@@ -41,13 +41,14 @@ openclaw plugins inspect openclaw-must-win --runtime --json
 
 Restart the Gateway after installing or upgrading the plugin. A custom harness that does not emit
 OpenClaw's normalized `before_tool_call` event cannot create tickets and therefore cannot commit in
-required mode.
+required mode. A detached process whose original command is no longer present in its `/proc`
+ancestry is also rejected; use best-effort mode only when that loss of enforcement is acceptable.
 
 ## Commit refused because context is ambiguous
 
-More than one active execution ticket matched the Gateway cgroup, and the hook could not match the
-shell command digest. Wait for the other tool call to finish and retry the commit. Best-effort mode
-can avoid the refusal, but the retried commit may have no OpenClaw attribution.
+More than one execution ticket with the same command digest matched the commit process. Wait for the
+other tool call to finish and retry the commit. Best-effort mode can avoid the refusal, but the
+retried commit may have no OpenClaw attribution.
 
 ## Terminal commit receives OpenClaw trailers
 

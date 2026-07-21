@@ -50,9 +50,8 @@ export function installDispatcher(input: {
   const hooksState = resolveHooksState(gitConfig, input.paths);
   const nodeExecutable = input.nodeExecutable ?? process.execPath;
   const runtimeEntry = installRuntimeAndHooks({
-    hooksDirectory: input.paths.hooksDirectory,
     nodeExecutable,
-    runtimeDirectory: input.paths.runtimeFilesDirectory,
+    paths: input.paths,
     sourceRuntimeDirectory: input.sourceRuntimeDirectory,
   });
   const state = createInstallState({
@@ -63,8 +62,13 @@ export function installDispatcher(input: {
       : { previousHooksPath: hooksState.previousHooksPath }),
     runtimeEntry,
   });
-  writePrivateJson(input.paths.installStatePath, state);
   applyGlobalHooksPath(gitConfig, input.paths.hooksDirectory, hooksState.currentHooksPath);
+  try {
+    writePrivateJson(input.paths.installStatePath, state);
+  } catch (error) {
+    restoreGlobalHooksPath(gitConfig, hooksState.currentHooksPath);
+    throw error;
+  }
   return state;
 }
 
@@ -126,25 +130,28 @@ function resolveHooksState(gitConfig: GitConfig, paths: AttributionPaths) {
 }
 
 function installRuntimeAndHooks(input: {
-  hooksDirectory: string;
   nodeExecutable: string;
-  runtimeDirectory: string;
+  paths: AttributionPaths;
   sourceRuntimeDirectory: string;
 }): string {
-  const runtimeEntry = join(input.runtimeDirectory, "cli.js");
-  copyRuntime(input.sourceRuntimeDirectory, input.runtimeDirectory);
-  writeFileSync(join(input.runtimeDirectory, "package.json"), '{"type":"module"}\n', {
+  const runtimeEntry = join(input.paths.runtimeFilesDirectory, "cli.js");
+  copyRuntime(input.sourceRuntimeDirectory, input.paths.runtimeFilesDirectory);
+  writeFileSync(join(input.paths.runtimeFilesDirectory, "package.json"), '{"type":"module"}\n', {
     mode: 0o600,
   });
   if (!existsSync(runtimeEntry)) {
     throw new Error(`compiled hook runtime is missing: ${runtimeEntry}`);
   }
-  mkdirPrivate(input.hooksDirectory);
+  mkdirPrivate(input.paths.hooksDirectory);
   for (const hookName of GIT_HOOK_NAMES) {
-    const hookPath = join(input.hooksDirectory, hookName);
-    writeFileSync(hookPath, buildHookScript(input.nodeExecutable, runtimeEntry, hookName), {
-      mode: 0o755,
-    });
+    const hookPath = join(input.paths.hooksDirectory, hookName);
+    writeFileSync(
+      hookPath,
+      buildHookScript(input.nodeExecutable, runtimeEntry, hookName, input.paths),
+      {
+        mode: 0o755,
+      },
+    );
     chmodSync(hookPath, 0o755);
   }
   return runtimeEntry;
@@ -251,8 +258,13 @@ function copyRuntime(source: string, target: string): void {
   cpSync(sourcePath, targetPath, { recursive: true });
 }
 
-function buildHookScript(nodeExecutable: string, runtimeEntry: string, hookName: string): string {
-  return `#!/bin/sh\nif [ ! -f ${shellQuote(runtimeEntry)} ]; then\n  printf '%s\\n' 'openclaw-must-win: hook runtime is missing; run setup or uninstall' >&2\n  exit 1\nfi\nexec ${shellQuote(nodeExecutable)} ${shellQuote(runtimeEntry)} hook ${shellQuote(hookName)} "$@"\n`;
+function buildHookScript(
+  nodeExecutable: string,
+  runtimeEntry: string,
+  hookName: string,
+  paths: AttributionPaths,
+): string {
+  return `#!/bin/sh\nif [ ! -f ${shellQuote(runtimeEntry)} ]; then\n  printf '%s\\n' 'openclaw-must-win: hook runtime is missing; run setup or uninstall' >&2\n  exit 1\nfi\nexport OPENCLAW_MUST_WIN_DATA_DIRECTORY=${shellQuote(paths.dataDirectory)}\nexport OPENCLAW_MUST_WIN_STATE_DIRECTORY=${shellQuote(paths.stateDirectory)}\nexport OPENCLAW_MUST_WIN_RUNTIME_DIRECTORY=${shellQuote(paths.runtimeDirectory)}\nexec ${shellQuote(nodeExecutable)} ${shellQuote(runtimeEntry)} hook ${shellQuote(hookName)} "$@"\n`;
 }
 
 function createGitConfig(): GitConfig {

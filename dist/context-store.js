@@ -100,11 +100,7 @@ export class AttributionContextStore {
         }
         const exact = tickets.filter((ticket) => snapshot.commandHashes.has(ticket.commandHash));
         const exactActive = exact.filter((ticket) => ticket.completedAt === undefined);
-        const active = tickets.filter((ticket) => ticket.completedAt === undefined);
-        const selected = selectUnique(exactActive) ??
-            selectUnique(exact) ??
-            selectUnique(active) ??
-            selectUnique(tickets);
+        const selected = selectUnique(exactActive) ?? selectUnique(exact);
         if (selected !== undefined) {
             return { origin: "openclaw", ticket: selected };
         }
@@ -112,7 +108,7 @@ export class AttributionContextStore {
         return {
             mode,
             origin: "openclaw",
-            reason: tickets.length === 0 ? "missing" : "ambiguous",
+            reason: exact.length > 1 ? "ambiguous" : "missing",
         };
     }
     prune() {
