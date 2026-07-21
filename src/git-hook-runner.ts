@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { accessSync, constants } from "node:fs";
+import { accessSync, constants, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { applyCommitTrailers } from "./commit-trailers.js";
@@ -42,17 +42,17 @@ export function runGitHook(
   return applyResolvedTrailers(args[0], resolution.ticket, dependencies.applyTrailers);
 }
 
-export function createHookChainer(paths: AttributionPaths, workingDirectory = process.cwd()) {
+export function createHookChainer(
+  paths: AttributionPaths,
+  workingDirectory = process.cwd(),
+  readStdin: () => Buffer = () => readFileSync(0),
+) {
   return (hookName: GitHookName, args: string[]): number => {
     const state = readInstallState(paths.installStatePath);
-    const seen = new Set<string>();
-    for (const candidate of resolveHookCandidates(state, hookName, workingDirectory)) {
-      const normalized = resolve(candidate);
-      if (shouldSkipHook(normalized, state, seen)) {
-        continue;
-      }
-      seen.add(normalized);
-      const status = runDelegatedHook(normalized, args);
+    const candidates = resolveDelegatedHooks(state, hookName, workingDirectory);
+    const input = hookReadsStdin(hookName) && candidates.length > 0 ? readStdin() : undefined;
+    for (const candidate of candidates) {
+      const status = runDelegatedHook(candidate, args, input);
       if (status !== 0) {
         return status;
       }
@@ -130,6 +130,23 @@ function resolveHookCandidates(
   ].filter((path): path is string => path !== undefined);
 }
 
+function resolveDelegatedHooks(
+  state: InstallState | undefined,
+  hookName: GitHookName,
+  workingDirectory: string,
+): string[] {
+  const seen = new Set<string>();
+  return resolveHookCandidates(state, hookName, workingDirectory)
+    .map((candidate) => resolve(candidate))
+    .filter((candidate) => {
+      if (shouldSkipHook(candidate, state, seen)) {
+        return false;
+      }
+      seen.add(candidate);
+      return true;
+    });
+}
+
 function shouldSkipHook(path: string, state: InstallState | undefined, seen: Set<string>): boolean {
   return (
     (state !== undefined && path.startsWith(`${resolve(state.hooksDirectory)}/`)) ||
@@ -138,13 +155,28 @@ function shouldSkipHook(path: string, state: InstallState | undefined, seen: Set
   );
 }
 
-function runDelegatedHook(path: string, args: string[]): number {
-  const result = spawnSync(path, args, { stdio: "inherit" });
+function runDelegatedHook(path: string, args: string[], input: Buffer | undefined): number {
+  const result = spawnSync(path, args, {
+    ...(input === undefined
+      ? { stdio: "inherit" as const }
+      : { input, stdio: ["pipe", "inherit", "inherit"] }),
+  });
   if (result.error) {
     process.stderr.write(`openclaw-must-win: ${formatError(result.error)}\n`);
     return 1;
   }
   return result.status ?? 1;
+}
+
+function hookReadsStdin(hookName: GitHookName): boolean {
+  return (
+    hookName === "post-receive" ||
+    hookName === "post-rewrite" ||
+    hookName === "pre-push" ||
+    hookName === "pre-receive" ||
+    hookName === "proc-receive" ||
+    hookName === "reference-transaction"
+  );
 }
 
 function resolvePreviousHook(

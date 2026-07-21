@@ -14,6 +14,6 @@ type HookRunnerDependencies = {
     resolveContext?: (snapshot: ProcessSnapshot) => AttributionResolution;
 };
 export declare function runGitHook(hookName: GitHookName, args: string[], paths: AttributionPaths, dependencies?: HookRunnerDependencies): GitHookRunResult;
-export declare function createHookChainer(paths: AttributionPaths, workingDirectory?: string): (hookName: GitHookName, args: string[]) => number;
+export declare function createHookChainer(paths: AttributionPaths, workingDirectory?: string, readStdin?: () => Buffer): (hookName: GitHookName, args: string[]) => number;
 export {};
 //# sourceMappingURL=git-hook-runner.d.ts.map

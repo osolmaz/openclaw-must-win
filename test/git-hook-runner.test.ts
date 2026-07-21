@@ -192,6 +192,19 @@ describe("createHookChainer", () => {
     expect(createHookChainer(paths, repository)("pre-commit", [])).toBe(0);
     expect(readFileSync(marker, "utf8")).toBe("previous\nrepository\n");
 
+    for (const [directory, value] of [
+      [previous, "previous"],
+      [join(repository, ".git", "hooks"), "repository"],
+    ] as const) {
+      const hook = join(directory, "pre-push");
+      writeFileSync(hook, `#!/bin/sh\ncat > '${join(root, `${value}-stdin`)}'\n`);
+      chmodSync(hook, 0o755);
+    }
+    const readStdin = () => Buffer.from("local remote refs\n");
+    expect(createHookChainer(paths, repository, readStdin)("pre-push", [])).toBe(0);
+    expect(readFileSync(join(root, "previous-stdin"), "utf8")).toBe("local remote refs\n");
+    expect(readFileSync(join(root, "repository-stdin"), "utf8")).toBe("local remote refs\n");
+
     const state = JSON.parse(readFileSync(paths.installStatePath, "utf8")) as Record<
       string,
       unknown
@@ -308,6 +321,6 @@ describe("hook chaining failures", () => {
     expect(createHookChainer(paths)("post-commit", [])).toBe(0);
     expect(createHookChainer(paths)("commit-msg", [])).toBe(1);
     expect(createHookChainer(paths)("pre-commit", [])).toBe(23);
-    expect(createHookChainer(paths)("pre-push", [])).toBe(1);
+    expect(createHookChainer(paths, process.cwd(), () => Buffer.alloc(0))("pre-push", [])).toBe(1);
   });
 });

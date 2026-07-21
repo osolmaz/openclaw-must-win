@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { accessSync, constants } from "node:fs";
+import { accessSync, constants, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { applyCommitTrailers } from "./commit-trailers.js";
@@ -22,17 +22,13 @@ export function runGitHook(hookName, args, paths, dependencies = {}) {
     }
     return applyResolvedTrailers(args[0], resolution.ticket, dependencies.applyTrailers);
 }
-export function createHookChainer(paths, workingDirectory = process.cwd()) {
+export function createHookChainer(paths, workingDirectory = process.cwd(), readStdin = () => readFileSync(0)) {
     return (hookName, args) => {
         const state = readInstallState(paths.installStatePath);
-        const seen = new Set();
-        for (const candidate of resolveHookCandidates(state, hookName, workingDirectory)) {
-            const normalized = resolve(candidate);
-            if (shouldSkipHook(normalized, state, seen)) {
-                continue;
-            }
-            seen.add(normalized);
-            const status = runDelegatedHook(normalized, args);
+        const candidates = resolveDelegatedHooks(state, hookName, workingDirectory);
+        const input = hookReadsStdin(hookName) && candidates.length > 0 ? readStdin() : undefined;
+        for (const candidate of candidates) {
+            const status = runDelegatedHook(candidate, args, input);
             if (status !== 0) {
                 return status;
             }
@@ -87,18 +83,42 @@ function resolveHookCandidates(state, hookName, workingDirectory) {
         resolveRepositoryHook(hookName, workingDirectory),
     ].filter((path) => path !== undefined);
 }
+function resolveDelegatedHooks(state, hookName, workingDirectory) {
+    const seen = new Set();
+    return resolveHookCandidates(state, hookName, workingDirectory)
+        .map((candidate) => resolve(candidate))
+        .filter((candidate) => {
+        if (shouldSkipHook(candidate, state, seen)) {
+            return false;
+        }
+        seen.add(candidate);
+        return true;
+    });
+}
 function shouldSkipHook(path, state, seen) {
     return ((state !== undefined && path.startsWith(`${resolve(state.hooksDirectory)}/`)) ||
         seen.has(path) ||
         !isExecutable(path));
 }
-function runDelegatedHook(path, args) {
-    const result = spawnSync(path, args, { stdio: "inherit" });
+function runDelegatedHook(path, args, input) {
+    const result = spawnSync(path, args, {
+        ...(input === undefined
+            ? { stdio: "inherit" }
+            : { input, stdio: ["pipe", "inherit", "inherit"] }),
+    });
     if (result.error) {
         process.stderr.write(`openclaw-must-win: ${formatError(result.error)}\n`);
         return 1;
     }
     return result.status ?? 1;
+}
+function hookReadsStdin(hookName) {
+    return (hookName === "post-receive" ||
+        hookName === "post-rewrite" ||
+        hookName === "pre-push" ||
+        hookName === "pre-receive" ||
+        hookName === "proc-receive" ||
+        hookName === "reference-transaction");
 }
 function resolvePreviousHook(previousHooksPath, hookName, workingDirectory) {
     if (!previousHooksPath) {
