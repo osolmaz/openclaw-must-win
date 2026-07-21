@@ -63,6 +63,9 @@ describe("Git dispatcher installation", () => {
       "hook 'prepare-commit-msg'",
     );
     expect(readFileSync(state.runtimeEntry, "utf8")).toContain("compiled runtime");
+    expect(readFileSync(join(value.paths.runtimeFilesDirectory, "package.json"), "utf8")).toBe(
+      '{"type":"module"}\n',
+    );
   });
 
   it("is idempotent and restores the previous hooks path", () => {

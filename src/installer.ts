@@ -133,6 +133,9 @@ function installRuntimeAndHooks(input: {
 }): string {
   const runtimeEntry = join(input.runtimeDirectory, "cli.js");
   copyRuntime(input.sourceRuntimeDirectory, input.runtimeDirectory);
+  writeFileSync(join(input.runtimeDirectory, "package.json"), '{"type":"module"}\n', {
+    mode: 0o600,
+  });
   if (!existsSync(runtimeEntry)) {
     throw new Error(`compiled hook runtime is missing: ${runtimeEntry}`);
   }

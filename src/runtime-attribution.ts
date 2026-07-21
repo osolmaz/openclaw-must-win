@@ -180,7 +180,7 @@ export class RuntimeAttribution {
 }
 
 function readEligibleCommand(event: ToolEvent): string | undefined {
-  if (event.toolName !== "exec" || event.toolKind === "code_mode_exec") {
+  if (event.toolName !== "exec") {
     return undefined;
   }
   const command = event.params["command"];
