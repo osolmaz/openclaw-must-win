@@ -5,7 +5,23 @@ export const EXECUTION_ID_ENV = "OPENCLAW_MUST_WIN_EXECUTION_ID";
 const EXECUTION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const POSIX_SHELLS = new Set(["ash", "bash", "dash", "fish", "ksh", "sh", "zsh"]);
 export function hashCommand(command) {
-    return createHash("sha256").update(command).digest("hex");
+    return createHash("sha256").update(normalizeCommandFingerprint(command)).digest("hex");
+}
+const SHELL_SYNTAX_PATTERN = /\\(.)|'([^']*)'|"((?:\\.|[^"])*)"|(\s+)/gsu;
+function normalizeCommandFingerprint(command) {
+    return command.trim().replace(SHELL_SYNTAX_PATTERN, replaceShellSyntax).replace(/\s+/gu, " ");
+}
+function replaceShellSyntax(match, escaped, singleQuoted, doubleQuoted, whitespace) {
+    if (whitespace !== undefined) {
+        return " ";
+    }
+    if (escaped !== undefined) {
+        return escaped;
+    }
+    if (singleQuoted !== undefined) {
+        return singleQuoted;
+    }
+    return doubleQuoted?.replace(/\\(.)/gsu, "$1") ?? match;
 }
 export function readProcessIdentity(pid = process.pid, readFile = readFileSync) {
     try {

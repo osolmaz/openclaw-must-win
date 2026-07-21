@@ -34,6 +34,7 @@ export type DoctorResult = {
 };
 
 type GitConfig = {
+  getEffectiveHooksPath?: () => string | undefined;
   getGlobalHooksPath: () => string | undefined;
   getLocalHooksPath?: () => string | undefined;
   setGlobalHooksPath: (value: string) => void;
@@ -116,6 +117,7 @@ export function doctorDispatcher(input: {
 function resolveHooksState(gitConfig: GitConfig, paths: AttributionPaths) {
   const existingState = readInstallState(paths.installStatePath);
   const currentHooksPath = gitConfig.getGlobalHooksPath();
+  assertSetupStateExists(existingState, currentHooksPath, paths.hooksDirectory);
   if (
     existingState?.hooksDirectory === paths.hooksDirectory &&
     currentHooksPath !== paths.hooksDirectory
@@ -219,6 +221,18 @@ function checkInstalledFiles(state: InstallState | undefined, errors: string[]):
   }
 }
 
+function assertSetupStateExists(
+  state: InstallState | undefined,
+  currentHooksPath: string | undefined,
+  dispatcherHooksPath: string,
+): void {
+  if (state === undefined && currentHooksPath === dispatcherHooksPath) {
+    throw new Error(
+      "core.hooksPath points to the dispatcher but setup state is missing; restore the previous hooks path before setup",
+    );
+  }
+}
+
 function checkGitConfiguration(
   gitConfig: GitConfig,
   state: InstallState | undefined,
@@ -234,6 +248,26 @@ function checkGitConfiguration(
   if (localHooksPath !== undefined) {
     errors.push(
       `repository core.hooksPath overrides the dispatcher (${localHooksPath}); remove the local override`,
+    );
+  }
+  checkEffectiveHooksPath(gitConfig, state, localHooksPath, errors);
+}
+
+function checkEffectiveHooksPath(
+  gitConfig: GitConfig,
+  state: InstallState | undefined,
+  localHooksPath: string | undefined,
+  errors: string[],
+): void {
+  const effectiveHooksPath = gitConfig.getEffectiveHooksPath?.();
+  if (
+    state !== undefined &&
+    effectiveHooksPath !== undefined &&
+    effectiveHooksPath !== state.hooksDirectory &&
+    effectiveHooksPath !== localHooksPath
+  ) {
+    errors.push(
+      `effective core.hooksPath overrides the dispatcher (${effectiveHooksPath}); remove the worktree or included override`,
     );
   }
 }
@@ -253,9 +287,30 @@ function copyRuntime(source: string, target: string): void {
   if (sourcePath === targetPath) {
     return;
   }
-  rmSync(targetPath, { force: true, recursive: true });
-  mkdirPrivate(dirname(targetPath));
-  cpSync(sourcePath, targetPath, { recursive: true });
+  const parent = dirname(targetPath);
+  const stagingPath = join(parent, `.runtime-staging-${randomUUID()}`);
+  const backupPath = join(parent, `.runtime-backup-${randomUUID()}`);
+  mkdirPrivate(parent);
+  try {
+    cpSync(sourcePath, stagingPath, { recursive: true });
+    if (!existsSync(join(stagingPath, "cli.js"))) {
+      throw new Error(`compiled hook runtime is missing: ${join(sourcePath, "cli.js")}`);
+    }
+    if (existsSync(targetPath)) {
+      renameSync(targetPath, backupPath);
+    }
+    try {
+      renameSync(stagingPath, targetPath);
+    } catch (error) {
+      if (existsSync(backupPath)) {
+        renameSync(backupPath, targetPath);
+      }
+      throw error;
+    }
+    rmSync(backupPath, { force: true, recursive: true });
+  } finally {
+    rmSync(stagingPath, { force: true, recursive: true });
+  }
 }
 
 function buildHookScript(
@@ -269,6 +324,9 @@ function buildHookScript(
 
 function createGitConfig(): GitConfig {
   return {
+    getEffectiveHooksPath() {
+      return readHooksPath(["config", "--get", "core.hooksPath"], [1]);
+    },
     getGlobalHooksPath() {
       return readHooksPath(["config", "--global", "--get", "core.hooksPath"], [1]);
     },

@@ -2,6 +2,7 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
 export declare class RuntimeAttribution {
     private readonly api;
     private gateway;
+    private readonly executionIdsByToolCall;
     private readonly models;
     private readonly pendingExecutionIds;
     private refreshTimer;
@@ -13,10 +14,13 @@ export declare class RuntimeAttribution {
     private enqueueExecutionId;
     private consumeExecutionId;
     private beforeTool;
+    private trackExecutionForToolCall;
     private ensureStore;
     private resolveModel;
-    private writeTicket;
+    private writeExecutionTicket;
+    private writeCommandTicket;
     private afterTool;
+    private completeToolExecution;
     private start;
     private startRefreshTimer;
     private refreshGateway;

@@ -74,6 +74,28 @@ describe("AttributionContextStore", () => {
     });
     expect(store.resolve(snapshot(undefined, unrelated))).toEqual({ origin: "terminal" });
   });
+});
+
+describe("AttributionContextStore lifecycle", () => {
+  it("matches quoted shell commands to their argv-equivalent process invocation", () => {
+    const { store } = createStore();
+    const gateway = store.registerGateway({
+      identity,
+      mode: "required",
+      openClawVersion: "1",
+    });
+    const ticket = store.recordTool({
+      command: "git commit -m 'two words'",
+      gateway,
+      model: "model",
+      toolCallId: "quoted",
+    });
+
+    expect(store.resolve(snapshot("git commit -m two words"))).toEqual({
+      origin: "openclaw",
+      ticket,
+    });
+  });
 
   it("retains a completed ticket for delayed commits", () => {
     const context = createStore();
@@ -93,6 +115,27 @@ describe("AttributionContextStore", () => {
 
     const resolution = context.store.resolve(snapshot("./commit-later.sh"));
     expect(resolution.origin).toBe("openclaw");
+    expect("ticket" in resolution && resolution.ticket.completedAt).toBe(2_000);
+  });
+
+  it("completes execution tickets by execution identity", () => {
+    const context = createStore();
+    const gateway = context.store.registerGateway({
+      identity,
+      mode: "required",
+      openClawVersion: "1",
+    });
+    const executionId = "123e4567-e89b-42d3-a456-426614174000";
+    context.store.recordTool({
+      command: `execution:${executionId}`,
+      executionId,
+      gateway,
+      model: "model",
+    });
+    context.advance(1_000);
+    context.store.completeExecution(executionId);
+
+    const resolution = context.store.resolve(snapshot(undefined, identity, executionId));
     expect("ticket" in resolution && resolution.ticket.completedAt).toBe(2_000);
   });
 
@@ -173,6 +216,8 @@ describe("AttributionContextStore", () => {
     mkdirSync(join(context.paths.runtimeDirectory, "gateways"), { recursive: true });
     writeFileSync(join(context.paths.runtimeDirectory, "tickets", "bad.json"), "not json\n");
     writeFileSync(join(context.paths.runtimeDirectory, "gateways", "bad.json"), "{}\n");
+    context.store.completeExecution(undefined);
+    context.store.completeExecution("missing");
     context.store.completeTool(undefined, "gateway");
     context.store.completeTool("missing", "gateway");
     context.store.prune();

@@ -68,6 +68,8 @@ export declare class AttributionContextStore {
         workdir?: string;
     }): ExecutionTicket;
     completeTool(toolCallId: string | undefined, gatewayId: string): void;
+    completeExecution(executionId: string | undefined): void;
+    private completeTicketPath;
     resolve(snapshot: ProcessSnapshot): AttributionResolution;
     prune(): void;
     private readGateways;

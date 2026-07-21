@@ -20,7 +20,32 @@ export type ProcessSnapshot = {
 };
 
 export function hashCommand(command: string): string {
-  return createHash("sha256").update(command).digest("hex");
+  return createHash("sha256").update(normalizeCommandFingerprint(command)).digest("hex");
+}
+
+const SHELL_SYNTAX_PATTERN = /\\(.)|'([^']*)'|"((?:\\.|[^"])*)"|(\s+)/gsu;
+
+function normalizeCommandFingerprint(command: string): string {
+  return command.trim().replace(SHELL_SYNTAX_PATTERN, replaceShellSyntax).replace(/\s+/gu, " ");
+}
+
+function replaceShellSyntax(
+  match: string,
+  escaped: string | undefined,
+  singleQuoted: string | undefined,
+  doubleQuoted: string | undefined,
+  whitespace: string | undefined,
+): string {
+  if (whitespace !== undefined) {
+    return " ";
+  }
+  if (escaped !== undefined) {
+    return escaped;
+  }
+  if (singleQuoted !== undefined) {
+    return singleQuoted;
+  }
+  return doubleQuoted?.replace(/\\(.)/gsu, "$1") ?? match;
 }
 
 export function readProcessIdentity(

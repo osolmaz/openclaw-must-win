@@ -65,6 +65,7 @@ export function doctorDispatcher(input) {
 function resolveHooksState(gitConfig, paths) {
     const existingState = readInstallState(paths.installStatePath);
     const currentHooksPath = gitConfig.getGlobalHooksPath();
+    assertSetupStateExists(existingState, currentHooksPath, paths.hooksDirectory);
     if (existingState?.hooksDirectory === paths.hooksDirectory &&
         currentHooksPath !== paths.hooksDirectory) {
         throw new Error(`core.hooksPath changed after setup (${currentHooksPath ?? "unset"}); run doctor before reinstalling`);
@@ -139,6 +140,11 @@ function checkInstalledFiles(state, errors) {
         errors.push(`Git hook is unavailable or not executable: ${missingHook}`);
     }
 }
+function assertSetupStateExists(state, currentHooksPath, dispatcherHooksPath) {
+    if (state === undefined && currentHooksPath === dispatcherHooksPath) {
+        throw new Error("core.hooksPath points to the dispatcher but setup state is missing; restore the previous hooks path before setup");
+    }
+}
 function checkGitConfiguration(gitConfig, state, errors) {
     const currentHooksPath = gitConfig.getGlobalHooksPath();
     if (state !== undefined && currentHooksPath !== state.hooksDirectory) {
@@ -147,6 +153,16 @@ function checkGitConfiguration(gitConfig, state, errors) {
     const localHooksPath = gitConfig.getLocalHooksPath?.();
     if (localHooksPath !== undefined) {
         errors.push(`repository core.hooksPath overrides the dispatcher (${localHooksPath}); remove the local override`);
+    }
+    checkEffectiveHooksPath(gitConfig, state, localHooksPath, errors);
+}
+function checkEffectiveHooksPath(gitConfig, state, localHooksPath, errors) {
+    const effectiveHooksPath = gitConfig.getEffectiveHooksPath?.();
+    if (state !== undefined &&
+        effectiveHooksPath !== undefined &&
+        effectiveHooksPath !== state.hooksDirectory &&
+        effectiveHooksPath !== localHooksPath) {
+        errors.push(`effective core.hooksPath overrides the dispatcher (${effectiveHooksPath}); remove the worktree or included override`);
     }
 }
 export function readInstallState(path) {
@@ -164,15 +180,41 @@ function copyRuntime(source, target) {
     if (sourcePath === targetPath) {
         return;
     }
-    rmSync(targetPath, { force: true, recursive: true });
-    mkdirPrivate(dirname(targetPath));
-    cpSync(sourcePath, targetPath, { recursive: true });
+    const parent = dirname(targetPath);
+    const stagingPath = join(parent, `.runtime-staging-${randomUUID()}`);
+    const backupPath = join(parent, `.runtime-backup-${randomUUID()}`);
+    mkdirPrivate(parent);
+    try {
+        cpSync(sourcePath, stagingPath, { recursive: true });
+        if (!existsSync(join(stagingPath, "cli.js"))) {
+            throw new Error(`compiled hook runtime is missing: ${join(sourcePath, "cli.js")}`);
+        }
+        if (existsSync(targetPath)) {
+            renameSync(targetPath, backupPath);
+        }
+        try {
+            renameSync(stagingPath, targetPath);
+        }
+        catch (error) {
+            if (existsSync(backupPath)) {
+                renameSync(backupPath, targetPath);
+            }
+            throw error;
+        }
+        rmSync(backupPath, { force: true, recursive: true });
+    }
+    finally {
+        rmSync(stagingPath, { force: true, recursive: true });
+    }
 }
 function buildHookScript(nodeExecutable, runtimeEntry, hookName, paths) {
     return `#!/bin/sh\nif [ ! -f ${shellQuote(runtimeEntry)} ]; then\n  printf '%s\\n' 'openclaw-must-win: hook runtime is missing; run setup or uninstall' >&2\n  exit 1\nfi\nexport OPENCLAW_MUST_WIN_DATA_DIRECTORY=${shellQuote(paths.dataDirectory)}\nexport OPENCLAW_MUST_WIN_STATE_DIRECTORY=${shellQuote(paths.stateDirectory)}\nexport OPENCLAW_MUST_WIN_RUNTIME_DIRECTORY=${shellQuote(paths.runtimeDirectory)}\nexec ${shellQuote(nodeExecutable)} ${shellQuote(runtimeEntry)} hook ${shellQuote(hookName)} "$@"\n`;
 }
 function createGitConfig() {
     return {
+        getEffectiveHooksPath() {
+            return readHooksPath(["config", "--get", "core.hooksPath"], [1]);
+        },
         getGlobalHooksPath() {
             return readHooksPath(["config", "--global", "--get", "core.hooksPath"], [1]);
         },

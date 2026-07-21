@@ -7,9 +7,11 @@ import { EXECUTION_ID_ENV, readProcessIdentity } from "./process-origin.js";
 const GATEWAY_REFRESH_INTERVAL_MS = 60_000;
 const MAX_PENDING_EXECUTIONS_PER_SESSION = 16;
 const MAX_PENDING_SESSIONS = 1_024;
+const MAX_TRACKED_TOOL_CALLS = 2_048;
 export class RuntimeAttribution {
     api;
     gateway;
+    executionIdsByToolCall = new Map();
     models = new ModelAttribution();
     pendingExecutionIds = new Map();
     refreshTimer;
@@ -56,7 +58,18 @@ export class RuntimeAttribution {
         if (process.platform !== "linux" || event.host !== "gateway" || sessionKey === undefined) {
             return undefined;
         }
+        if (!this.ensureStore()) {
+            return undefined;
+        }
+        const runId = context.runId;
+        const model = this.resolveModel(runId, { ...context, sessionKey });
+        if (model === undefined) {
+            return undefined;
+        }
         const executionId = randomUUID();
+        if (!this.writeExecutionTicket(executionId, model, runId, sessionKey)) {
+            return undefined;
+        }
         this.enqueueExecutionId(sessionKey, executionId);
         return { [EXECUTION_ID_ENV]: executionId };
     }
@@ -106,8 +119,27 @@ export class RuntimeAttribution {
             this.api.logger.warn("openclaw-must-win: active model is unavailable");
             return undefined;
         }
-        this.writeTicket(command, model, event, context, runId, this.consumeExecutionId(context.sessionKey));
+        const executionId = this.consumeExecutionId(context.sessionKey);
+        if (executionId === undefined) {
+            this.writeCommandTicket(command, model, event, context, runId);
+        }
+        else {
+            this.trackExecutionForToolCall(event.toolCallId ?? context.toolCallId, executionId);
+        }
         return undefined;
+    }
+    trackExecutionForToolCall(toolCallId, executionId) {
+        if (toolCallId === undefined) {
+            return;
+        }
+        this.executionIdsByToolCall.set(toolCallId, executionId);
+        if (this.executionIdsByToolCall.size <= MAX_TRACKED_TOOL_CALLS) {
+            return;
+        }
+        const oldestToolCallId = this.executionIdsByToolCall.keys().next().value;
+        if (oldestToolCallId !== undefined) {
+            this.executionIdsByToolCall.delete(oldestToolCallId);
+        }
     }
     ensureStore() {
         if (this.store === undefined || this.gateway === undefined) {
@@ -124,7 +156,28 @@ export class RuntimeAttribution {
                 ...(context.sessionKey === undefined ? {} : { sessionKey: context.sessionKey }),
             }));
     }
-    writeTicket(command, model, event, context, runId, executionId) {
+    writeExecutionTicket(executionId, model, runId, sessionKey) {
+        if (this.store === undefined || this.gateway === undefined) {
+            return false;
+        }
+        try {
+            this.gateway = this.store.refreshGateway(this.gateway);
+            this.store.recordTool({
+                command: `execution:${executionId}`,
+                executionId,
+                gateway: this.gateway,
+                model,
+                ...(runId === undefined ? {} : { runId }),
+                sessionKey,
+            });
+            return true;
+        }
+        catch (error) {
+            this.api.logger.warn(`openclaw-must-win: could not record execution ticket: ${formatError(error)}`);
+            return false;
+        }
+    }
+    writeCommandTicket(command, model, event, context, runId) {
         if (this.store === undefined || this.gateway === undefined) {
             return;
         }
@@ -132,7 +185,6 @@ export class RuntimeAttribution {
             this.gateway = this.store.refreshGateway(this.gateway);
             this.store.recordTool({
                 command,
-                ...(executionId === undefined ? {} : { executionId }),
                 gateway: this.gateway,
                 model,
                 ...(runId === undefined ? {} : { runId }),
@@ -151,10 +203,25 @@ export class RuntimeAttribution {
             return;
         }
         try {
-            this.store.completeTool(event.toolCallId ?? context.toolCallId, this.gateway.gatewayId);
+            this.completeToolExecution(event.toolCallId ?? context.toolCallId);
         }
         catch {
             // Expiry pruning handles an incomplete ticket later.
+        }
+    }
+    completeToolExecution(toolCallId) {
+        if (this.store === undefined || this.gateway === undefined) {
+            return;
+        }
+        const executionId = toolCallId === undefined ? undefined : this.executionIdsByToolCall.get(toolCallId);
+        if (toolCallId !== undefined) {
+            this.executionIdsByToolCall.delete(toolCallId);
+        }
+        if (executionId === undefined) {
+            this.store.completeTool(toolCallId, this.gateway.gatewayId);
+        }
+        else {
+            this.store.completeExecution(executionId);
         }
     }
     start() {
@@ -212,6 +279,7 @@ export class RuntimeAttribution {
         }
         this.gateway = undefined;
         this.store = undefined;
+        this.executionIdsByToolCall.clear();
         this.models.clear();
         this.pendingExecutionIds.clear();
     }

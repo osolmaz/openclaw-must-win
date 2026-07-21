@@ -3,7 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
 import { afterEach, describe, expect, it } from "vitest";
-import { EXECUTION_ID_ENV } from "../src/process-origin.js";
+import { AttributionContextStore } from "../src/context-store.js";
+import { resolveAttributionPaths } from "../src/paths.js";
+import { EXECUTION_ID_ENV, readProcessIdentity } from "../src/process-origin.js";
 import { RuntimeAttribution } from "../src/runtime-attribution.js";
 
 const roots: string[] = [];
@@ -63,19 +65,19 @@ function callHook(
 describe("RuntimeAttribution", () => {
   it("records model-qualified execution tickets without command text", () => {
     const { hooks, root } = createApi();
-    const executionEnvironment = callHook(
-      hooks,
-      "resolve_exec_env",
-      { host: "gateway", sessionKey: "session", toolName: "exec" },
-      { sessionKey: "session" },
-    ) as Record<string, string>;
-    expect(executionEnvironment[EXECUTION_ID_ENV]).toMatch(/^[0-9a-f-]{36}$/u);
     callHook(
       hooks,
       "model_call_started",
       { model: "gpt-5.6-sol", provider: "openai", runId: "run", sessionKey: "session" },
       {},
     );
+    const executionEnvironment = callHook(
+      hooks,
+      "resolve_exec_env",
+      { host: "gateway", sessionKey: "session", toolName: "exec" },
+      { runId: "run", sessionKey: "session" },
+    ) as Record<string, string>;
+    expect(executionEnvironment[EXECUTION_ID_ENV]).toMatch(/^[0-9a-f-]{36}$/u);
     expect(
       callHook(
         hooks,
@@ -101,6 +103,60 @@ describe("RuntimeAttribution", () => {
     expect(readFileSync(ticketPath, "utf8")).toContain("completedAt");
     callHook(hooks, "session_end", { sessionKey: "session" }, {});
     callHook(hooks, "gateway_stop", {}, {});
+  });
+
+  it("keeps each owning ticket when an earlier execution id is left pending", () => {
+    const { hooks } = createApi();
+    callHook(
+      hooks,
+      "model_call_started",
+      { model: "gpt-5.6-sol", provider: "openai", runId: "run", sessionKey: "session" },
+      {},
+    );
+    const firstEnvironment = callHook(
+      hooks,
+      "resolve_exec_env",
+      { host: "gateway", sessionKey: "session", toolName: "exec" },
+      { runId: "run", sessionKey: "session" },
+    ) as Record<string, string>;
+    const secondEnvironment = callHook(
+      hooks,
+      "resolve_exec_env",
+      { host: "gateway", sessionKey: "session", toolName: "exec" },
+      { runId: "run", sessionKey: "session" },
+    ) as Record<string, string>;
+
+    callHook(
+      hooks,
+      "before_tool_call",
+      {
+        params: { command: "git commit -m current" },
+        runId: "run",
+        toolCallId: "second-tool",
+        toolName: "exec",
+      },
+      { sessionKey: "session" },
+    );
+
+    const currentIdentity = readProcessIdentity();
+    if (currentIdentity === undefined) {
+      throw new Error("expected Linux process identity");
+    }
+    const resolution = new AttributionContextStore(resolveAttributionPaths()).resolve({
+      commandHashes: new Set(),
+      executionIds: new Set([secondEnvironment[EXECUTION_ID_ENV] ?? "missing"]),
+      identity: currentIdentity,
+    });
+    expect(resolution.origin).toBe("openclaw");
+    if (resolution.origin !== "openclaw") {
+      throw new Error("expected OpenClaw process identity");
+    }
+    expect("ticket" in resolution).toBe(true);
+    if (!("ticket" in resolution)) {
+      throw new Error("expected an execution ticket");
+    }
+    expect(resolution.ticket.executionId).toBe(secondEnvironment[EXECUTION_ID_ENV]);
+    expect(resolution.ticket.executionId).not.toBe(firstEnvironment[EXECUTION_ID_ENV]);
   });
 
   it("starts lazily, accepts code-mode exec, and ignores unrelated tools", () => {

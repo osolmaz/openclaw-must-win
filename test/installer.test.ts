@@ -143,6 +143,14 @@ describe("Git dispatcher diagnostics", () => {
     ).toContain(
       "repository core.hooksPath overrides the dispatcher (/local/hooks); remove the local override",
     );
+    expect(
+      doctorDispatcher({
+        gitConfig: { ...value.gitConfig, getEffectiveHooksPath: () => "/worktree/hooks" },
+        paths: value.paths,
+      }).errors,
+    ).toContain(
+      "effective core.hooksPath overrides the dispatcher (/worktree/hooks); remove the worktree or included override",
+    );
   });
 
   it("uses real isolated global Git configuration", () => {
@@ -284,6 +292,41 @@ describe("Git dispatcher runtime paths", () => {
     });
 
     expect(readFileSync(marker, "utf8")).toBe("ran");
+  });
+
+  it("preserves the installed runtime when an upgrade source is invalid", () => {
+    const value = fixture();
+    writeFileSync(join(value.source, "cli.js"), "// working runtime\n");
+    const installed = installDispatcher({
+      gitConfig: value.gitConfig,
+      paths: value.paths,
+      sourceRuntimeDirectory: value.source,
+    });
+    const invalidSource = join(value.root, "invalid-source");
+    mkdirSync(invalidSource);
+
+    expect(() =>
+      installDispatcher({
+        gitConfig: value.gitConfig,
+        paths: value.paths,
+        sourceRuntimeDirectory: invalidSource,
+      }),
+    ).toThrow("compiled hook runtime is missing");
+    expect(readFileSync(installed.runtimeEntry, "utf8")).toContain("working runtime");
+    expect(value.current()).toBe(value.paths.hooksDirectory);
+  });
+
+  it("rejects setup when Git still points at a dispatcher with missing state", () => {
+    const value = fixture(undefined);
+    value.gitConfig.setGlobalHooksPath(value.paths.hooksDirectory);
+
+    expect(() =>
+      installDispatcher({
+        gitConfig: value.gitConfig,
+        paths: value.paths,
+        sourceRuntimeDirectory: value.source,
+      }),
+    ).toThrow("setup state is missing");
   });
 
   it("keeps a runtime that is already in its installed location", () => {

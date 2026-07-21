@@ -75,8 +75,18 @@ export class AttributionContextStore {
         if (toolCallId === undefined) {
             return;
         }
-        const ticketId = ticketRecordId(gatewayId, toolCallId);
-        const path = join(this.ticketsDirectory, `${ticketId}.json`);
+        this.completeTicketPath(join(this.ticketsDirectory, `${ticketRecordId(gatewayId, toolCallId)}.json`));
+    }
+    completeExecution(executionId) {
+        if (executionId === undefined) {
+            return;
+        }
+        const matchingPath = this.listJsonFiles(this.ticketsDirectory).find((path) => this.readTicket(path)?.executionId === executionId);
+        if (matchingPath !== undefined) {
+            this.completeTicketPath(matchingPath);
+        }
+    }
+    completeTicketPath(path) {
         const ticket = this.readTicket(path);
         if (ticket === undefined) {
             return;

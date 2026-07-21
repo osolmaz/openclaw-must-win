@@ -13,6 +13,7 @@ export type DoctorResult = {
     warnings: string[];
 };
 type GitConfig = {
+    getEffectiveHooksPath?: () => string | undefined;
     getGlobalHooksPath: () => string | undefined;
     getLocalHooksPath?: () => string | undefined;
     setGlobalHooksPath: (value: string) => void;
