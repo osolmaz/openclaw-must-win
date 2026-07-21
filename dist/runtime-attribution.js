@@ -44,12 +44,20 @@ export class RuntimeAttribution {
     }
     beforeTool(event, context) {
         const command = readEligibleCommand(event);
-        if (command === undefined || this.store === undefined || this.gateway === undefined) {
+        if (command === undefined) {
+            if (event.toolName === "exec") {
+                this.api.logger.warn("openclaw-must-win: exec call has no command to attribute");
+            }
+            return undefined;
+        }
+        if (this.store === undefined || this.gateway === undefined) {
+            this.api.logger.warn("openclaw-must-win: attribution store is unavailable");
             return undefined;
         }
         const runId = event.runId ?? context.runId;
         const model = this.resolveModel(runId, context);
         if (model === undefined) {
+            this.api.logger.warn("openclaw-must-win: active model is unavailable");
             return undefined;
         }
         this.writeTicket(command, model, event, context, runId);
@@ -80,7 +88,8 @@ export class RuntimeAttribution {
                 ...readWorkdir(event.params),
             });
         }
-        catch {
+        catch (error) {
+            this.api.logger.warn(`openclaw-must-win: could not record execution ticket: ${formatError(error)}`);
             // Required mode is enforced by the Git dispatcher when context is unavailable.
         }
     }
@@ -161,5 +170,8 @@ function readWorkdir(params) {
 function readToolCallId(event, context) {
     const toolCallId = event.toolCallId ?? context.toolCallId;
     return toolCallId === undefined ? {} : { toolCallId };
+}
+function formatError(error) {
+    return error instanceof Error ? error.message : String(error);
 }
 //# sourceMappingURL=runtime-attribution.js.map
