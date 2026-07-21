@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { realpathSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { doctorDispatcher, installDispatcher, uninstallDispatcher } from "./installer.js";
@@ -75,7 +76,18 @@ function printUsage() {
 function formatError(error) {
     return error instanceof Error ? error.message : String(error);
 }
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (isMainModule(process.argv[1])) {
     process.exitCode = runCli(process.argv.slice(2));
+}
+function isMainModule(entryPath) {
+    if (entryPath === undefined) {
+        return false;
+    }
+    try {
+        return realpathSync(entryPath) === realpathSync(fileURLToPath(import.meta.url));
+    }
+    catch {
+        return false;
+    }
 }
 //# sourceMappingURL=cli.js.map

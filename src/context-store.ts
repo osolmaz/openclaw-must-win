@@ -181,7 +181,7 @@ export class AttributionContextStore {
     const commandMatches = tickets.filter((ticket) =>
       snapshot.commandHashes.has(ticket.commandHash),
     );
-    const matches = executionMatches.length > 0 ? executionMatches : commandMatches;
+    const matches = snapshot.executionIds.size > 0 ? executionMatches : commandMatches;
     const activeMatches = matches.filter((ticket) => ticket.completedAt === undefined);
     const selected = selectUnique(activeMatches) ?? selectUnique(matches);
     if (selected !== undefined) {

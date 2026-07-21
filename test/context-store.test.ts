@@ -121,6 +121,13 @@ describe("AttributionContextStore", () => {
       origin: "openclaw",
       reason: "missing",
     });
+    expect(
+      store.resolve(snapshot("same", identity, "123e4567-e89b-42d3-a456-426614174999")),
+    ).toEqual({
+      mode: "required",
+      origin: "openclaw",
+      reason: "missing",
+    });
   });
 
   it("reports best-effort ambiguity without upgrading it to required", () => {
