@@ -3,11 +3,15 @@ export declare class RuntimeAttribution {
     private readonly api;
     private gateway;
     private readonly models;
+    private readonly pendingExecutionIds;
     private refreshTimer;
     private store;
     constructor(api: OpenClawPluginApi);
     register(): void;
     private recordModel;
+    private resolveExecEnvironment;
+    private enqueueExecutionId;
+    private consumeExecutionId;
     private beforeTool;
     private ensureStore;
     private resolveModel;

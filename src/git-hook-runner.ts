@@ -28,14 +28,13 @@ export function runGitHook(
   dependencies: HookRunnerDependencies = {},
 ): GitHookRunResult {
   const resolution = resolveHookContext(paths, dependencies);
-  const contextFailure = requiredContextFailure(hookName, resolution);
-  if (contextFailure) {
-    return contextFailure;
-  }
-
   const chainStatus = (dependencies.chainHooks ?? createHookChainer(paths))(hookName, args);
   if (chainStatus !== 0) {
     return { status: chainStatus };
+  }
+  const contextFailure = requiredContextFailure(hookName, resolution);
+  if (contextFailure) {
+    return contextFailure;
   }
   if (!shouldApplyTrailers(hookName, resolution)) {
     return { status: 0 };
@@ -46,9 +45,6 @@ export function runGitHook(
 export function createHookChainer(paths: AttributionPaths, workingDirectory = process.cwd()) {
   return (hookName: GitHookName, args: string[]): number => {
     const state = readInstallState(paths.installStatePath);
-    if (state === undefined) {
-      return 0;
-    }
     const seen = new Set<string>();
     for (const candidate of resolveHookCandidates(state, hookName, workingDirectory)) {
       const normalized = resolve(candidate);
@@ -124,19 +120,21 @@ function applyResolvedTrailers(
 }
 
 function resolveHookCandidates(
-  state: InstallState,
+  state: InstallState | undefined,
   hookName: GitHookName,
   workingDirectory: string,
 ): string[] {
   return [
-    resolvePreviousHook(state.previousHooksPath, hookName, workingDirectory),
+    resolvePreviousHook(state?.previousHooksPath, hookName, workingDirectory),
     resolveRepositoryHook(hookName, workingDirectory),
   ].filter((path): path is string => path !== undefined);
 }
 
-function shouldSkipHook(path: string, state: InstallState, seen: Set<string>): boolean {
+function shouldSkipHook(path: string, state: InstallState | undefined, seen: Set<string>): boolean {
   return (
-    path.startsWith(`${resolve(state.hooksDirectory)}/`) || seen.has(path) || !isExecutable(path)
+    (state !== undefined && path.startsWith(`${resolve(state.hooksDirectory)}/`)) ||
+    seen.has(path) ||
+    !isExecutable(path)
   );
 }
 

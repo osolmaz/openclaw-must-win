@@ -41,8 +41,9 @@ openclaw plugins inspect openclaw-must-win --runtime --json
 
 Restart the Gateway after installing or upgrading the plugin. A custom harness that does not emit
 OpenClaw's normalized `before_tool_call` event cannot create tickets and therefore cannot commit in
-required mode. A detached process whose original command is no longer present in its `/proc`
-ancestry is also rejected; use best-effort mode only when that loss of enforcement is acceptable.
+required mode. A process that has neither an inherited execution ID nor its original command in
+`/proc` ancestry is also rejected; use best-effort mode only when that loss of enforcement is
+acceptable.
 
 ## Commit refused because context is ambiguous
 

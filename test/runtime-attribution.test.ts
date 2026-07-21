@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
 import { afterEach, describe, expect, it } from "vitest";
+import { EXECUTION_ID_ENV } from "../src/process-origin.js";
 import { RuntimeAttribution } from "../src/runtime-attribution.js";
 
 const roots: string[] = [];
@@ -25,6 +26,11 @@ function createApi(config: unknown = {}, pluginConfig: unknown = {}, startGatewa
   process.env["XDG_RUNTIME_DIR"] = root;
   const hooks = new Map<string, (event: never, context: never) => unknown>();
   const api = {
+    logger: {
+      warn() {
+        return undefined;
+      },
+    },
     on(name: string, handler: (event: never, context: never) => unknown) {
       hooks.set(name, handler);
     },
@@ -57,6 +63,13 @@ function callHook(
 describe("RuntimeAttribution", () => {
   it("records model-qualified execution tickets without command text", () => {
     const { hooks, root } = createApi();
+    const executionEnvironment = callHook(
+      hooks,
+      "resolve_exec_env",
+      { host: "gateway", sessionKey: "session", toolName: "exec" },
+      { sessionKey: "session" },
+    ) as Record<string, string>;
+    expect(executionEnvironment[EXECUTION_ID_ENV]).toMatch(/^[0-9a-f-]{36}$/u);
     callHook(
       hooks,
       "model_call_started",
@@ -81,6 +94,7 @@ describe("RuntimeAttribution", () => {
     const ticketPath = join(ticketDirectory, readdirSync(ticketDirectory)[0] ?? "missing");
     const ticketText = readFileSync(ticketPath, "utf8");
     expect(ticketText).toContain("openai/gpt-5.6-sol");
+    expect(ticketText).toContain(executionEnvironment[EXECUTION_ID_ENV] ?? "missing execution id");
     expect(ticketText).not.toContain("secret");
 
     callHook(hooks, "after_tool_call", { toolCallId: "tool", toolName: "exec" }, {});

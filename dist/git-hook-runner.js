@@ -9,13 +9,13 @@ import { readInstallState } from "./installer.js";
 import { readProcessSnapshot } from "./process-origin.js";
 export function runGitHook(hookName, args, paths, dependencies = {}) {
     const resolution = resolveHookContext(paths, dependencies);
-    const contextFailure = requiredContextFailure(hookName, resolution);
-    if (contextFailure) {
-        return contextFailure;
-    }
     const chainStatus = (dependencies.chainHooks ?? createHookChainer(paths))(hookName, args);
     if (chainStatus !== 0) {
         return { status: chainStatus };
+    }
+    const contextFailure = requiredContextFailure(hookName, resolution);
+    if (contextFailure) {
+        return contextFailure;
     }
     if (!shouldApplyTrailers(hookName, resolution)) {
         return { status: 0 };
@@ -25,9 +25,6 @@ export function runGitHook(hookName, args, paths, dependencies = {}) {
 export function createHookChainer(paths, workingDirectory = process.cwd()) {
     return (hookName, args) => {
         const state = readInstallState(paths.installStatePath);
-        if (state === undefined) {
-            return 0;
-        }
         const seen = new Set();
         for (const candidate of resolveHookCandidates(state, hookName, workingDirectory)) {
             const normalized = resolve(candidate);
@@ -86,12 +83,14 @@ function applyResolvedTrailers(messageFile, ticket, applyTrailers = applyCommitT
 }
 function resolveHookCandidates(state, hookName, workingDirectory) {
     return [
-        resolvePreviousHook(state.previousHooksPath, hookName, workingDirectory),
+        resolvePreviousHook(state?.previousHooksPath, hookName, workingDirectory),
         resolveRepositoryHook(hookName, workingDirectory),
     ].filter((path) => path !== undefined);
 }
 function shouldSkipHook(path, state, seen) {
-    return (path.startsWith(`${resolve(state.hooksDirectory)}/`) || seen.has(path) || !isExecutable(path));
+    return ((state !== undefined && path.startsWith(`${resolve(state.hooksDirectory)}/`)) ||
+        seen.has(path) ||
+        !isExecutable(path));
 }
 function runDelegatedHook(path, args) {
     const result = spawnSync(path, args, { stdio: "inherit" });

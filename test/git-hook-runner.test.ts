@@ -32,6 +32,7 @@ function fixture() {
 
 const snapshot = {
   commandHashes: new Set<string>(),
+  executionIds: new Set<string>(),
   identity: { bootId: "boot", cgroup: "cgroup" },
 };
 const ticket = {
@@ -73,7 +74,7 @@ describe("runGitHook", () => {
     ).toEqual({ status: 0 });
   });
 
-  it("blocks missing required attribution before existing hooks run", () => {
+  it("blocks missing required attribution after existing hooks run", () => {
     const { paths } = fixture();
     const chainHooks = vi.fn(() => 0);
     const result = runGitHook("commit-msg", ["message"], paths, {
@@ -84,7 +85,7 @@ describe("runGitHook", () => {
 
     expect(result.status).toBe(1);
     expect(result.message).toContain("missing execution context");
-    expect(chainHooks).not.toHaveBeenCalled();
+    expect(chainHooks).toHaveBeenCalledWith("commit-msg", ["message"]);
   });
 
   it("passes terminal and best-effort commits through without attribution", () => {
@@ -239,6 +240,19 @@ describe("createHookChainer", () => {
 });
 
 describe("hook chaining failures", () => {
+  it("runs repository hooks when setup state is missing", () => {
+    const { paths, root } = fixture();
+    const repository = join(root, "repository-without-state");
+    execFileSync("git", ["init", "-q", repository]);
+    const marker = join(root, "missing-state-marker");
+    const hook = join(repository, ".git", "hooks", "pre-commit");
+    writeFileSync(hook, `#!/bin/sh\nprintf ran > '${marker}'\n`);
+    chmodSync(hook, 0o755);
+
+    expect(createHookChainer(paths, repository)("pre-commit", [])).toBe(0);
+    expect(readFileSync(marker, "utf8")).toBe("ran");
+  });
+
   it("propagates a delegated hook failure and tolerates missing setup", () => {
     const { paths, root } = fixture();
     expect(createHookChainer(paths, root)("pre-commit", [])).toBe(0);

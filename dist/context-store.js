@@ -54,6 +54,7 @@ export class AttributionContextStore {
             cgroup: input.gateway.cgroup,
             commandHash: hashCommand(input.command),
             expiresAt: startedAt + ACTIVE_TICKET_TTL_MS,
+            ...(input.executionId === undefined ? {} : { executionId: input.executionId }),
             gatewayId: input.gateway.gatewayId,
             mode: input.gateway.mode,
             model: input.model,
@@ -98,9 +99,11 @@ export class AttributionContextStore {
         if (tickets.length === 0 && gateways.length === 0) {
             return { origin: "terminal" };
         }
-        const exact = tickets.filter((ticket) => snapshot.commandHashes.has(ticket.commandHash));
-        const exactActive = exact.filter((ticket) => ticket.completedAt === undefined);
-        const selected = selectUnique(exactActive) ?? selectUnique(exact);
+        const executionMatches = tickets.filter((ticket) => ticket.executionId !== undefined && snapshot.executionIds.has(ticket.executionId));
+        const commandMatches = tickets.filter((ticket) => snapshot.commandHashes.has(ticket.commandHash));
+        const matches = executionMatches.length > 0 ? executionMatches : commandMatches;
+        const activeMatches = matches.filter((ticket) => ticket.completedAt === undefined);
+        const selected = selectUnique(activeMatches) ?? selectUnique(matches);
         if (selected !== undefined) {
             return { origin: "openclaw", ticket: selected };
         }
@@ -108,7 +111,7 @@ export class AttributionContextStore {
         return {
             mode,
             origin: "openclaw",
-            reason: exact.length > 1 ? "ambiguous" : "missing",
+            reason: matches.length > 1 ? "ambiguous" : "missing",
         };
     }
     prune() {
@@ -219,7 +222,7 @@ function isExecutionTicket(value) {
     }
     return (value["schemaVersion"] === SCHEMA_VERSION &&
         hasRequiredFields(value, ["bootId", "cgroup", "commandHash", "gatewayId", "model", "openClawVersion", "ticketId"], ["startedAt", "expiresAt"]) &&
-        hasOptionalFields(value, ["runId", "sessionKey", "toolCallId", "workdir"], ["completedAt"]) &&
+        hasOptionalFields(value, ["executionId", "runId", "sessionKey", "toolCallId", "workdir"], ["completedAt"]) &&
         isMode(value["mode"]));
 }
 function hasRequiredFields(record, stringFields, numberFields) {

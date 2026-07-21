@@ -11,10 +11,12 @@ the same idempotent initialization before that registry's first `exec` call. The
 Linux cgroup, boot ID, process ID, OpenClaw version, and enforcement mode. A one-minute heartbeat
 keeps the record current.
 
-Each normalized `exec` call creates an execution ticket before the command starts. The ticket
-records the model, run and session identifiers, tool-call identifier, working-directory hint, and a
-SHA-256 digest of the command. Full command text is not written. `after_tool_call` marks the ticket
-complete and retains it for 30 minutes so a background commit can still be attributed.
+Each normalized `exec` call creates an execution ticket before the command starts. For built-in
+Gateway execution, `resolve_exec_env` also places a random execution ID in the child environment;
+the ticket records that ID without changing the command. The ticket also records the model, run and
+session identifiers, tool-call identifier, working-directory hint, and a SHA-256 digest of the
+command. Full command text is not written. `after_tool_call` marks the ticket complete and retains
+it for 30 minutes so an inheriting background process can still be attributed.
 
 Files live under `$XDG_RUNTIME_DIR/openclaw-must-win` with user-only permissions. Writes use a
 temporary file and atomic rename. Expired records are removed during normal plugin and hook
@@ -25,11 +27,16 @@ activity, and the ticket count is bounded.
 A Git hook reads its own cgroup and boot ID from `/proc`. Terminal processes normally run in a
 different scope from the managed Gateway, so they do not match its records.
 
-For a matching Gateway cgroup, the hook hashes command-line arguments from its process ancestry. It
-selects a ticket only when exactly one command digest appears in that ancestry, preferring an active
-ticket over a completed one. A sole ticket without a matching digest is not enough: required mode
-rejects the commit rather than risk attributing it to an unrelated tool call. Multiple matching
-tickets are ambiguous.
+For a matching Gateway cgroup, the hook first looks for a ticket whose execution ID appears in the
+Git process environment or its ancestry. This survives shell quoting, wrappers, nested scripts, and
+background processes that inherit the environment. Codex app-server commands do not use built-in
+`exec`, so the fallback hashes only complete process invocations and POSIX shell `-c` payloads from
+the ancestry. It never treats an individual argv token as a command match.
+
+The hook selects a ticket only when exactly one execution ID or complete command digest matches,
+preferring an active ticket over a completed one. A sole ticket without positive evidence is not
+enough: required mode rejects the commit rather than risk attributing it to an unrelated tool call.
+Multiple matching tickets are ambiguous.
 
 Required mode stops message hooks when an OpenClaw process has no unique ticket. Best-effort mode
 delegates existing hooks and continues without attribution. A process outside every registered

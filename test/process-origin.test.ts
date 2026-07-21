@@ -53,21 +53,25 @@ describe("process origin", () => {
     });
   });
 
-  it("hashes ancestor command arguments", () => {
+  it("collects full invocations, shell payloads, and execution ids", () => {
+    const executionId = "123e4567-e89b-42d3-a456-426614174000";
     const readFile = fakeReader({
       "/proc/7/cgroup": "0::/openclaw.service\n",
       "/proc/7/cmdline": Buffer.from("node\0hook.js\0"),
+      "/proc/7/environ": Buffer.from(`PATH=/bin\0OPENCLAW_MUST_WIN_EXECUTION_ID=${executionId}\0`),
       "/proc/7/stat": stat(7, 6),
-      "/proc/6/cmdline": Buffer.from("git\0commit\0-m\0subject\0"),
+      "/proc/6/cmdline": Buffer.from("git\0commit\0-m\0two words\0"),
       "/proc/6/stat": stat(6, 5),
-      "/proc/5/cmdline": Buffer.from("bash\0-lc\0git commit -m subject\0"),
+      "/proc/5/cmdline": Buffer.from('bash\0-lc\0git commit -m "two words"\0'),
       "/proc/5/stat": stat(5, 1),
       "/proc/sys/kernel/random/boot_id": "boot-id\n",
     });
 
     const snapshot = readProcessSnapshot(7, readFile);
-    expect(snapshot?.commandHashes.has(hashCommand("git commit -m subject"))).toBe(true);
-    expect(snapshot?.commandHashes.has(hashCommand("git commit -m subject"))).toBe(true);
+    expect(snapshot?.commandHashes.has(hashCommand('git commit -m "two words"'))).toBe(true);
+    expect(snapshot?.commandHashes.has(hashCommand("git commit -m two words"))).toBe(true);
+    expect(snapshot?.commandHashes.has(hashCommand("git"))).toBe(false);
+    expect(snapshot?.executionIds.has(executionId)).toBe(true);
     expect(snapshot?.identity.cgroup).toBe("0::/openclaw.service");
   });
 

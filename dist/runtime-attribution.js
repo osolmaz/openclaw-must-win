@@ -1,13 +1,17 @@
+import { randomUUID } from "node:crypto";
 import { AttributionContextStore, } from "./context-store.js";
 import { resolveConfiguredModel } from "./configured-model.js";
 import { ModelAttribution } from "./model-attribution.js";
 import { resolveAttributionPaths } from "./paths.js";
-import { readProcessIdentity } from "./process-origin.js";
+import { EXECUTION_ID_ENV, readProcessIdentity } from "./process-origin.js";
 const GATEWAY_REFRESH_INTERVAL_MS = 60_000;
+const MAX_PENDING_EXECUTIONS_PER_SESSION = 16;
+const MAX_PENDING_SESSIONS = 1_024;
 export class RuntimeAttribution {
     api;
     gateway;
     models = new ModelAttribution();
+    pendingExecutionIds = new Map();
     refreshTimer;
     store;
     constructor(api) {
@@ -20,6 +24,7 @@ export class RuntimeAttribution {
         this.api.on("model_call_started", (event, context) => {
             this.recordModel(event, context.sessionKey);
         });
+        this.api.on("resolve_exec_env", (event, context) => this.resolveExecEnvironment(event, context));
         this.api.on("before_tool_call", (event, context) => {
             this.beforeTool(event, context);
         });
@@ -27,7 +32,11 @@ export class RuntimeAttribution {
             this.afterTool(event, context);
         });
         this.api.on("session_end", (event, context) => {
-            this.models.endSession(event.sessionKey ?? context.sessionKey);
+            const sessionKey = event.sessionKey ?? context.sessionKey;
+            this.models.endSession(sessionKey);
+            if (sessionKey !== undefined) {
+                this.pendingExecutionIds.delete(sessionKey);
+            }
         });
         this.api.on("gateway_stop", () => {
             this.stop();
@@ -41,6 +50,43 @@ export class RuntimeAttribution {
             runId: event.runId,
             ...(sessionKey === undefined ? {} : { sessionKey }),
         });
+    }
+    resolveExecEnvironment(event, context) {
+        const sessionKey = event.sessionKey ?? context.sessionKey;
+        if (process.platform !== "linux" || event.host !== "gateway" || sessionKey === undefined) {
+            return undefined;
+        }
+        const executionId = randomUUID();
+        this.enqueueExecutionId(sessionKey, executionId);
+        return { [EXECUTION_ID_ENV]: executionId };
+    }
+    enqueueExecutionId(sessionKey, executionId) {
+        let pending = this.pendingExecutionIds.get(sessionKey);
+        if (pending === undefined) {
+            if (this.pendingExecutionIds.size >= MAX_PENDING_SESSIONS) {
+                const oldestSessionKey = this.pendingExecutionIds.keys().next().value;
+                if (oldestSessionKey !== undefined) {
+                    this.pendingExecutionIds.delete(oldestSessionKey);
+                }
+            }
+            pending = [];
+            this.pendingExecutionIds.set(sessionKey, pending);
+        }
+        pending.push(executionId);
+        if (pending.length > MAX_PENDING_EXECUTIONS_PER_SESSION) {
+            pending.shift();
+        }
+    }
+    consumeExecutionId(sessionKey) {
+        if (sessionKey === undefined) {
+            return undefined;
+        }
+        const pending = this.pendingExecutionIds.get(sessionKey);
+        const executionId = pending?.shift();
+        if (pending?.length === 0) {
+            this.pendingExecutionIds.delete(sessionKey);
+        }
+        return executionId;
     }
     beforeTool(event, context) {
         const command = readEligibleCommand(event);
@@ -60,7 +106,7 @@ export class RuntimeAttribution {
             this.api.logger.warn("openclaw-must-win: active model is unavailable");
             return undefined;
         }
-        this.writeTicket(command, model, event, context, runId);
+        this.writeTicket(command, model, event, context, runId, this.consumeExecutionId(context.sessionKey));
         return undefined;
     }
     ensureStore() {
@@ -78,7 +124,7 @@ export class RuntimeAttribution {
                 ...(context.sessionKey === undefined ? {} : { sessionKey: context.sessionKey }),
             }));
     }
-    writeTicket(command, model, event, context, runId) {
+    writeTicket(command, model, event, context, runId, executionId) {
         if (this.store === undefined || this.gateway === undefined) {
             return;
         }
@@ -86,6 +132,7 @@ export class RuntimeAttribution {
             this.gateway = this.store.refreshGateway(this.gateway);
             this.store.recordTool({
                 command,
+                ...(executionId === undefined ? {} : { executionId }),
                 gateway: this.gateway,
                 model,
                 ...(runId === undefined ? {} : { runId }),
@@ -118,13 +165,22 @@ export class RuntimeAttribution {
         if (identity === undefined) {
             return;
         }
-        this.store = new AttributionContextStore(resolveAttributionPaths());
-        this.gateway = this.store.registerGateway({
-            identity,
-            mode: readMode(this.api.pluginConfig),
-            openClawVersion: this.api.runtime.version,
-        });
-        this.refreshTimer = this.startRefreshTimer();
+        try {
+            const store = new AttributionContextStore(resolveAttributionPaths());
+            const gateway = store.registerGateway({
+                identity,
+                mode: readMode(this.api.pluginConfig),
+                openClawVersion: this.api.runtime.version,
+            });
+            this.store = store;
+            this.gateway = gateway;
+            this.refreshTimer = this.startRefreshTimer();
+        }
+        catch (error) {
+            this.store = undefined;
+            this.gateway = undefined;
+            this.api.logger.warn(`openclaw-must-win: could not initialize attribution store: ${formatError(error)}`);
+        }
     }
     startRefreshTimer() {
         if (this.store === undefined || this.gateway === undefined) {
@@ -157,6 +213,7 @@ export class RuntimeAttribution {
         this.gateway = undefined;
         this.store = undefined;
         this.models.clear();
+        this.pendingExecutionIds.clear();
     }
 }
 function readEligibleCommand(event) {

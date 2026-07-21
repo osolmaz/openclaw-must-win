@@ -59,8 +59,10 @@ to those hooks. Repository hooks under `.git/hooks` also continue to run.
 ## Operation
 
 The plugin writes short-lived execution tickets under the user's runtime directory. Tickets contain
-a command digest and attribution metadata, never the full command or conversation. The Git
-dispatcher compares each commit process with the Gateway cgroup and selects its execution ticket.
+a random execution ID, a command digest, and attribution metadata, never the full command or
+conversation. Built-in Gateway execution carries the random ID in its child environment. The Git
+dispatcher compares each commit process with the Gateway cgroup and requires a matching execution ID
+or complete command digest before selecting its ticket.
 
 Required mode is the default. It rejects a commit from the Gateway cgroup when attribution is
 missing or ambiguous. Best-effort mode lets that commit continue without OpenClaw trailers:

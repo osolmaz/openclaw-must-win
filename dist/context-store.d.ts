@@ -17,6 +17,7 @@ export type ExecutionTicket = {
     commandHash: string;
     completedAt?: number;
     expiresAt: number;
+    executionId?: string;
     gatewayId: string;
     mode: AttributionMode;
     model: string;
@@ -58,6 +59,7 @@ export declare class AttributionContextStore {
     unregisterGateway(gatewayId: string): void;
     recordTool(input: {
         command: string;
+        executionId?: string;
         gateway: GatewayRecord;
         model: string;
         runId?: string;

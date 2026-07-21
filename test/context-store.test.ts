@@ -39,9 +39,10 @@ function createStore(nowValue = 1_000) {
 const identity = { bootId: "boot", cgroup: "0::/openclaw.service" };
 const unrelated = { bootId: "boot", cgroup: "0::/terminal.scope" };
 
-function snapshot(command?: string, currentIdentity = identity) {
+function snapshot(command?: string, currentIdentity = identity, executionId?: string) {
   return {
     commandHashes: new Set(command === undefined ? [] : [hashCommand(command)]),
+    executionIds: new Set(executionId === undefined ? [] : [executionId]),
     identity: currentIdentity,
   };
 }
@@ -57,6 +58,7 @@ describe("AttributionContextStore", () => {
     });
     const ticket = store.recordTool({
       command: "git commit -m test",
+      executionId: "123e4567-e89b-42d3-a456-426614174000",
       gateway,
       model: "openai/gpt-5.6-sol",
       runId: "run",
@@ -64,7 +66,9 @@ describe("AttributionContextStore", () => {
       toolCallId: "tool",
     });
 
-    expect(store.resolve(snapshot("git commit -m test"))).toEqual({
+    expect(
+      store.resolve(snapshot(undefined, identity, "123e4567-e89b-42d3-a456-426614174000")),
+    ).toEqual({
       origin: "openclaw",
       ticket,
     });
