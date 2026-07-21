@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { basename, join } from "node:path";
 import type { AttributionPaths } from "./paths.js";
-import { hashCommand, type ProcessSnapshot } from "./process-origin.js";
+import { hashCommandVariants, type ProcessSnapshot } from "./process-origin.js";
 
 const SCHEMA_VERSION = 1;
 const ACTIVE_TICKET_TTL_MS = 2 * 60 * 60 * 1_000;
@@ -34,7 +34,7 @@ export type GatewayRecord = {
 export type ExecutionTicket = {
   bootId: string;
   cgroup: string;
-  commandHash: string;
+  commandHashes: string[];
   completedAt?: number;
   expiresAt: number;
   gatewayId: string;
@@ -117,7 +117,7 @@ export class AttributionContextStore {
     const ticket: ExecutionTicket = {
       bootId: input.gateway.bootId,
       cgroup: input.gateway.cgroup,
-      commandHash: hashCommand(input.command),
+      commandHashes: [...hashCommandVariants(input.command)].sort(),
       expiresAt: startedAt + ACTIVE_TICKET_TTL_MS,
       gatewayId: input.gateway.gatewayId,
       mode: input.gateway.mode,
@@ -159,6 +159,7 @@ export class AttributionContextStore {
   }
 
   resolve(snapshot: ProcessSnapshot): AttributionResolution {
+    this.prune();
     const now = this.now();
     const tickets = this.readTickets().filter(
       (ticket) =>
@@ -176,7 +177,9 @@ export class AttributionContextStore {
       return { origin: "terminal" };
     }
 
-    const matches = tickets.filter((ticket) => snapshot.commandHashes.has(ticket.commandHash));
+    const matches = tickets.filter((ticket) =>
+      ticket.commandHashes.some((hash) => snapshot.commandHashes.has(hash)),
+    );
     const activeMatches = matches.filter((ticket) => ticket.completedAt === undefined);
     const selected = selectUnique(activeMatches) ?? selectUnique(matches);
     if (selected !== undefined) {
@@ -319,9 +322,10 @@ function isExecutionTicket(value: unknown): value is ExecutionTicket {
     value["schemaVersion"] === SCHEMA_VERSION &&
     hasRequiredFields(
       value,
-      ["bootId", "cgroup", "commandHash", "gatewayId", "model", "openClawVersion", "ticketId"],
+      ["bootId", "cgroup", "gatewayId", "model", "openClawVersion", "ticketId"],
       ["startedAt", "expiresAt"],
     ) &&
+    hasStringArray(value["commandHashes"]) &&
     hasOptionalFields(value, ["runId", "sessionKey", "toolCallId", "workdir"], ["completedAt"]) &&
     isMode(value["mode"])
   );
@@ -355,6 +359,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
+}
+
+function hasStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length > 0 && value.every(isString);
 }
 
 function isOptionalString(value: unknown): value is string | undefined {

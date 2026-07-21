@@ -1,4 +1,5 @@
 import type { AttributionPaths } from "./paths.js";
+import { type ProcessIdentity } from "./process-origin.js";
 export type InstallState = {
     hooksDirectory: string;
     installedAt: string;
@@ -33,6 +34,7 @@ export declare function doctorDispatcher(input: {
     gitConfig?: GitConfig;
     paths: AttributionPaths;
     platform?: NodeJS.Platform;
+    readIdentity?: () => ProcessIdentity | undefined;
 }): DoctorResult;
 export declare function readInstallState(path: string): InstallState | undefined;
 export {};

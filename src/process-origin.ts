@@ -18,6 +18,15 @@ export function hashCommand(command: string): string {
   return createHash("sha256").update(normalizeCommandFingerprint(command)).digest("hex");
 }
 
+export function hashCommandVariants(command: string): ReadonlySet<string> {
+  const hashes = new Set([hashCommand(command)]);
+  if (hasDynamicShellSyntax(command)) {
+    return hashes;
+  }
+  collectCommandVariantHashes(command, hashes, 0);
+  return hashes;
+}
+
 const SHELL_SYNTAX_PATTERN = /\\(.)|'([^']*)'|"((?:\\.|[^"])*)"|(\s+)/gsu;
 
 function normalizeCommandFingerprint(command: string): string {
@@ -41,6 +50,121 @@ function replaceShellSyntax(
     return singleQuoted;
   }
   return doubleQuoted?.replace(/\\(.)/gsu, "$1") ?? match;
+}
+
+function hasDynamicShellSyntax(command: string): boolean {
+  return command.includes("<<") || command.includes("$(") || command.includes("`");
+}
+
+function collectCommandVariantHashes(command: string, hashes: Set<string>, depth: number): void {
+  if (depth >= 4 || hashes.size >= 64) {
+    return;
+  }
+  for (const words of parseSimpleCommands(command)) {
+    const normalizedWords = normalizeSimpleCommand(words);
+    if (normalizedWords.length > 0) {
+      hashes.add(hashCommand(normalizedWords.join(" ")));
+    }
+    const nestedCommand = readNestedShellCommand(words);
+    if (nestedCommand !== undefined && !hasDynamicShellSyntax(nestedCommand)) {
+      collectCommandVariantHashes(nestedCommand, hashes, depth + 1);
+    }
+  }
+}
+
+type ShellParseState = {
+  commands: string[][];
+  escaped: boolean;
+  quote: "double" | "single" | undefined;
+  word: string;
+  words: string[];
+};
+
+function parseSimpleCommands(command: string): string[][] {
+  const state: ShellParseState = {
+    commands: [],
+    escaped: false,
+    quote: undefined,
+    word: "",
+    words: [],
+  };
+  for (const character of command) {
+    if (consumeShellEscape(state, character) || consumeShellQuote(state, character)) {
+      continue;
+    }
+    if (state.quote === undefined && /[;&|()\n]/u.test(character)) {
+      finishParsedCommand(state);
+    } else if (state.quote === undefined && /\s/u.test(character)) {
+      finishParsedWord(state);
+    } else {
+      state.word += character;
+    }
+  }
+  finishParsedCommand(state);
+  return state.commands;
+}
+
+function consumeShellEscape(state: ShellParseState, character: string): boolean {
+  if (state.escaped) {
+    state.word += character;
+    state.escaped = false;
+    return true;
+  }
+  if (character === "\\" && state.quote !== "single") {
+    state.escaped = true;
+    return true;
+  }
+  return false;
+}
+
+function consumeShellQuote(state: ShellParseState, character: string): boolean {
+  if (character === "'" && state.quote !== "double") {
+    state.quote = state.quote === "single" ? undefined : "single";
+    return true;
+  }
+  if (character === '"' && state.quote !== "single") {
+    state.quote = state.quote === "double" ? undefined : "double";
+    return true;
+  }
+  return false;
+}
+
+function finishParsedWord(state: ShellParseState): void {
+  if (state.word) {
+    state.words.push(state.word);
+    state.word = "";
+  }
+}
+
+function finishParsedCommand(state: ShellParseState): void {
+  finishParsedWord(state);
+  if (state.words.length > 0) {
+    state.commands.push(state.words);
+    state.words = [];
+  }
+}
+
+function normalizeSimpleCommand(words: string[]): string[] {
+  const firstCommandIndex = words.findIndex((word) => !/^[A-Za-z_][A-Za-z0-9_]*=/u.test(word));
+  if (firstCommandIndex < 0) {
+    return [];
+  }
+  const commandIndex =
+    words[firstCommandIndex] === "exec" || words[firstCommandIndex] === "command"
+      ? firstCommandIndex + 1
+      : firstCommandIndex;
+  return words.slice(commandIndex);
+}
+
+function readNestedShellCommand(words: string[]): string | undefined {
+  const executable = basename(words[0] ?? "");
+  if (!POSIX_SHELLS.has(executable)) {
+    return undefined;
+  }
+  const commandFlagIndex = words.findIndex(
+    (argument, index) => index > 0 && /^-[^-]*c[^-]*$/u.test(argument),
+  );
+  return commandFlagIndex < 0 ? undefined : words[commandFlagIndex + 1];
 }
 
 export function readProcessIdentity(
@@ -87,7 +211,7 @@ function collectProcessEvidence(pid: number, readFile: typeof readFileSync) {
         commandHashes.add(hashCommand(argv.join(" ")));
       }
       for (const payload of readProcessPayloads(argv)) {
-        commandHashes.add(hashCommand(payload));
+        addHashes(commandHashes, hashCommandVariants(payload));
       }
       currentPid = readParentPid(readFile(`/proc/${String(currentPid)}/stat`, "utf8"));
     } catch {
@@ -95,6 +219,12 @@ function collectProcessEvidence(pid: number, readFile: typeof readFileSync) {
     }
   }
   return { commandHashes };
+}
+
+function addHashes(target: Set<string>, hashes: ReadonlySet<string>): void {
+  for (const hash of hashes) {
+    target.add(hash);
+  }
 }
 
 function readProcessArguments(pid: number, readFile: typeof readFileSync): string[] {

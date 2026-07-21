@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -94,6 +94,26 @@ describe("AttributionContextStore lifecycle", () => {
     });
   });
 
+  it("matches a delayed exec-replaced command to its owning shell ticket", () => {
+    const { store } = createStore();
+    const gateway = store.registerGateway({
+      identity,
+      mode: "required",
+      openClawVersion: "1",
+    });
+    const ticket = store.recordTool({
+      command: "sh -c 'sleep 1; exec git -C /repo commit -m test'",
+      gateway,
+      model: "model",
+      toolCallId: "background",
+    });
+
+    expect(store.resolve(snapshot("git -C /repo commit -m test"))).toEqual({
+      origin: "openclaw",
+      ticket,
+    });
+  });
+
   it("retains a completed ticket for delayed commits", () => {
     const context = createStore();
     const gateway = context.store.registerGateway({
@@ -174,9 +194,9 @@ describe("AttributionContextStore lifecycle", () => {
     });
     context.store.completeTool("tool", gateway.gatewayId);
     context.advance(31 * 60 * 1_000);
-    context.store.prune();
 
     expect(context.store.resolve(snapshot("git commit"))).toEqual({ origin: "terminal" });
+    expect(readdirSync(join(context.paths.runtimeDirectory, "tickets"))).toHaveLength(0);
   });
 
   it("ignores malformed and missing ticket records", () => {

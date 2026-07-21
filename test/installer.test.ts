@@ -126,6 +126,14 @@ describe("Git dispatcher diagnostics", () => {
     expect(
       doctorDispatcher({ gitConfig: value.gitConfig, paths: value.paths, platform: "linux" }),
     ).toMatchObject({ ok: true });
+    expect(
+      doctorDispatcher({
+        gitConfig: value.gitConfig,
+        paths: value.paths,
+        platform: "linux",
+        readIdentity: () => undefined,
+      }).errors,
+    ).toContain("process-origin checks cannot read the current /proc boot and cgroup identity");
     rmSync(join(value.paths.hooksDirectory, "pre-commit"));
     rmSync(join(value.paths.runtimeFilesDirectory, "cli.js"));
     value.gitConfig.setGlobalHooksPath("/broken");

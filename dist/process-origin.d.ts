@@ -8,6 +8,7 @@ export type ProcessSnapshot = {
     identity: ProcessIdentity;
 };
 export declare function hashCommand(command: string): string;
+export declare function hashCommandVariants(command: string): ReadonlySet<string>;
 export declare function readProcessIdentity(pid?: number, readFile?: typeof readFileSync): ProcessIdentity | undefined;
 export declare function readProcessSnapshot(pid?: number, readFile?: typeof readFileSync): ProcessSnapshot | undefined;
 //# sourceMappingURL=process-origin.d.ts.map

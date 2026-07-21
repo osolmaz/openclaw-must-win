@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync, } from "node:fs";
 import { basename, join } from "node:path";
-import { hashCommand } from "./process-origin.js";
+import { hashCommandVariants } from "./process-origin.js";
 const SCHEMA_VERSION = 1;
 const ACTIVE_TICKET_TTL_MS = 2 * 60 * 60 * 1_000;
 const COMPLETED_TICKET_TTL_MS = 30 * 60 * 1_000;
@@ -52,7 +52,7 @@ export class AttributionContextStore {
         const ticket = {
             bootId: input.gateway.bootId,
             cgroup: input.gateway.cgroup,
-            commandHash: hashCommand(input.command),
+            commandHashes: [...hashCommandVariants(input.command)].sort(),
             expiresAt: startedAt + ACTIVE_TICKET_TTL_MS,
             gatewayId: input.gateway.gatewayId,
             mode: input.gateway.mode,
@@ -89,6 +89,7 @@ export class AttributionContextStore {
         });
     }
     resolve(snapshot) {
+        this.prune();
         const now = this.now();
         const tickets = this.readTickets().filter((ticket) => ticket.bootId === snapshot.identity.bootId &&
             ticket.cgroup === snapshot.identity.cgroup &&
@@ -99,7 +100,7 @@ export class AttributionContextStore {
         if (tickets.length === 0 && gateways.length === 0) {
             return { origin: "terminal" };
         }
-        const matches = tickets.filter((ticket) => snapshot.commandHashes.has(ticket.commandHash));
+        const matches = tickets.filter((ticket) => ticket.commandHashes.some((hash) => snapshot.commandHashes.has(hash)));
         const activeMatches = matches.filter((ticket) => ticket.completedAt === undefined);
         const selected = selectUnique(activeMatches) ?? selectUnique(matches);
         if (selected !== undefined) {
@@ -219,7 +220,8 @@ function isExecutionTicket(value) {
         return false;
     }
     return (value["schemaVersion"] === SCHEMA_VERSION &&
-        hasRequiredFields(value, ["bootId", "cgroup", "commandHash", "gatewayId", "model", "openClawVersion", "ticketId"], ["startedAt", "expiresAt"]) &&
+        hasRequiredFields(value, ["bootId", "cgroup", "gatewayId", "model", "openClawVersion", "ticketId"], ["startedAt", "expiresAt"]) &&
+        hasStringArray(value["commandHashes"]) &&
         hasOptionalFields(value, ["runId", "sessionKey", "toolCallId", "workdir"], ["completedAt"]) &&
         isMode(value["mode"]));
 }
@@ -236,6 +238,9 @@ function isRecord(value) {
 }
 function isString(value) {
     return typeof value === "string" && value.length > 0;
+}
+function hasStringArray(value) {
+    return Array.isArray(value) && value.length > 0 && value.every(isString);
 }
 function isOptionalString(value) {
     return value === undefined || isString(value);

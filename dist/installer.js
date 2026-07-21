@@ -3,6 +3,7 @@ import { accessSync, chmodSync, constants, cpSync, existsSync, mkdirSync, readFi
 import { basename, dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { GIT_HOOK_NAMES } from "./git-hooks.js";
+import { readProcessIdentity } from "./process-origin.js";
 const INSTALL_SCHEMA_VERSION = 1;
 export function installDispatcher(input) {
     const gitConfig = input.gitConfig ?? createGitConfig();
@@ -52,7 +53,7 @@ export function uninstallDispatcher(input) {
     removeEmptyDirectory(input.paths.stateDirectory);
 }
 export function doctorDispatcher(input) {
-    const errors = checkPlatform(input.platform ?? process.platform);
+    const errors = checkPlatform(input.platform ?? process.platform, input.readIdentity ?? readProcessIdentity);
     const warnings = [];
     const state = readInstallState(input.paths.installStatePath);
     checkInstalledFiles(state, errors);
@@ -121,8 +122,13 @@ function restoreGlobalHooksPath(gitConfig, hooksPath) {
         gitConfig.setGlobalHooksPath(hooksPath);
     }
 }
-function checkPlatform(platform) {
-    return platform === "linux" ? [] : ["process-origin checks require Linux /proc and cgroup v2"];
+function checkPlatform(platform, readIdentity) {
+    if (platform !== "linux") {
+        return ["process-origin checks require Linux /proc and cgroup v2"];
+    }
+    return readIdentity() === undefined
+        ? ["process-origin checks cannot read the current /proc boot and cgroup identity"]
+        : [];
 }
 function checkInstalledFiles(state, errors) {
     if (state === undefined) {

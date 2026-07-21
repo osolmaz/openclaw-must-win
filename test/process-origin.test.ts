@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { hashCommand, readProcessIdentity, readProcessSnapshot } from "../src/process-origin.js";
+import {
+  hashCommand,
+  hashCommandVariants,
+  readProcessIdentity,
+  readProcessSnapshot,
+} from "../src/process-origin.js";
 
 function stat(pid: number, parent: number): string {
   const fields = [
@@ -70,6 +75,21 @@ describe("process origin", () => {
     expect(snapshot?.commandHashes.has(hashCommand("git commit -m two words"))).toBe(true);
     expect(snapshot?.commandHashes.has(hashCommand("git"))).toBe(false);
     expect(snapshot?.identity.cgroup).toBe("0::/openclaw.service");
+  });
+
+  it("extracts complete commands from nested shell execution", () => {
+    const variants = hashCommandVariants("sh -c 'sleep 1; exec git -C /repo commit -m test'");
+
+    expect(variants.has(hashCommand("sh -c sleep 1; exec git -C /repo commit -m test"))).toBe(true);
+    expect(variants.has(hashCommand("sleep 1"))).toBe(true);
+    expect(variants.has(hashCommand("git -C /repo commit -m test"))).toBe(true);
+    expect(variants.has(hashCommand("git"))).toBe(false);
+    expect(
+      hashCommandVariants("MODE=test command git commit -m two\\ words").has(
+        hashCommand("git commit -m two words"),
+      ),
+    ).toBe(true);
+    expect(hashCommandVariants("cat <<EOF\ngit commit\nEOF").size).toBe(1);
   });
 
   it("recognizes an interpreted script as a complete process payload", () => {

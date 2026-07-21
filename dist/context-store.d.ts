@@ -14,7 +14,7 @@ export type GatewayRecord = {
 export type ExecutionTicket = {
     bootId: string;
     cgroup: string;
-    commandHash: string;
+    commandHashes: string[];
     completedAt?: number;
     expiresAt: number;
     gatewayId: string;

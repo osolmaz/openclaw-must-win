@@ -38,7 +38,7 @@ const snapshot = {
 const ticket = {
   bootId: "boot",
   cgroup: "cgroup",
-  commandHash: "hash",
+  commandHashes: ["hash"],
   expiresAt: 2,
   gatewayId: "gateway",
   mode: "required" as const,
