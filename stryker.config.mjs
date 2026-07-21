@@ -1,12 +1,7 @@
 export default {
   checkers: ["typescript"],
   coverageAnalysis: "perTest",
-  mutate: [
-    "src/commit-attribution.ts",
-    "src/commit-trailers.ts",
-    "src/model-attribution.ts",
-    "src/tool-attribution.ts",
-  ],
+  mutate: ["src/commit-trailers.ts", "src/model-attribution.ts"],
   reporters: ["clear-text", "progress"],
   testRunner: "vitest",
   thresholds: {

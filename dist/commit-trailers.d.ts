@@ -3,7 +3,5 @@ export type CommitTrailers = {
     generatedBy: string;
 };
 export declare function buildCommitTrailers(model: string, openClawVersion: string): CommitTrailers;
-export declare function createCommitHookDirectory(): string;
-export declare function removeCommitHookDirectory(hooksDirectory: string | undefined): void;
-export declare function wrapExecCommand(command: string, hooksDirectory: string, model: string, openClawVersion: string, environment?: NodeJS.ProcessEnv, platform?: NodeJS.Platform): string;
+export declare function applyCommitTrailers(messageFile: string, model: string, openClawVersion: string, gitExecutable?: string): void;
 //# sourceMappingURL=commit-trailers.d.ts.map

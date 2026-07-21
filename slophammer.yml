@@ -14,10 +14,8 @@ typescript:
       min_tokens: 100
   mutation:
     targets:
-      - src/commit-attribution.ts
       - src/commit-trailers.ts
       - src/model-attribution.ts
-      - src/tool-attribution.ts
   dependency_boundaries:
     - from: src
       allow:

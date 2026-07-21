@@ -5,6 +5,7 @@ export class ModelAttribution {
     modelsBySession = new Map();
     sessionsByRun = new Map();
     record(call) {
+        const model = formatModel(call.provider, call.model);
         if (!this.modelsByRun.has(call.runId) && this.modelsByRun.size >= MAX_TRACKED_RUNS) {
             const oldestRunId = this.modelsByRun.keys().next().value;
             if (oldestRunId !== undefined) {
@@ -12,7 +13,7 @@ export class ModelAttribution {
                 this.sessionsByRun.delete(oldestRunId);
             }
         }
-        this.modelsByRun.set(call.runId, call.model);
+        this.modelsByRun.set(call.runId, model);
         if (call.sessionKey !== undefined) {
             if (!this.modelsBySession.has(call.sessionKey) &&
                 this.modelsBySession.size >= MAX_TRACKED_SESSIONS) {
@@ -21,7 +22,7 @@ export class ModelAttribution {
                     this.evictSession(oldestSessionKey);
                 }
             }
-            this.modelsBySession.set(call.sessionKey, call.model);
+            this.modelsBySession.set(call.sessionKey, model);
             this.sessionsByRun.set(call.runId, call.sessionKey);
         }
     }
@@ -37,10 +38,14 @@ export class ModelAttribution {
             : this.modelsBySession.get(context.sessionKey);
     }
     endSession(sessionKey) {
-        if (sessionKey === undefined) {
-            return;
+        if (sessionKey !== undefined) {
+            this.evictSession(sessionKey);
         }
-        this.evictSession(sessionKey);
+    }
+    clear() {
+        this.modelsByRun.clear();
+        this.modelsBySession.clear();
+        this.sessionsByRun.clear();
     }
     evictSession(sessionKey) {
         this.modelsBySession.delete(sessionKey);
@@ -51,10 +56,13 @@ export class ModelAttribution {
             }
         }
     }
-    clear() {
-        this.modelsByRun.clear();
-        this.modelsBySession.clear();
-        this.sessionsByRun.clear();
+}
+export function formatModel(provider, model) {
+    const normalizedModel = model.trim();
+    const normalizedProvider = provider?.trim();
+    if (!normalizedProvider || normalizedModel.includes("/")) {
+        return normalizedModel;
     }
+    return `${normalizedProvider}/${normalizedModel}`;
 }
 //# sourceMappingURL=model-attribution.js.map
