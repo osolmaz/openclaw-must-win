@@ -1,5 +1,6 @@
 export type ModelCall = {
   model: string;
+  provider?: string;
   runId: string;
   sessionKey?: string;
 };
@@ -18,6 +19,7 @@ export class ModelAttribution {
   private readonly sessionsByRun = new Map<string, string>();
 
   record(call: ModelCall): void {
+    const model = formatModel(call.provider, call.model);
     if (!this.modelsByRun.has(call.runId) && this.modelsByRun.size >= MAX_TRACKED_RUNS) {
       const oldestRunId = this.modelsByRun.keys().next().value;
       if (oldestRunId !== undefined) {
@@ -25,7 +27,7 @@ export class ModelAttribution {
         this.sessionsByRun.delete(oldestRunId);
       }
     }
-    this.modelsByRun.set(call.runId, call.model);
+    this.modelsByRun.set(call.runId, model);
     if (call.sessionKey !== undefined) {
       if (
         !this.modelsBySession.has(call.sessionKey) &&
@@ -36,7 +38,7 @@ export class ModelAttribution {
           this.evictSession(oldestSessionKey);
         }
       }
-      this.modelsBySession.set(call.sessionKey, call.model);
+      this.modelsBySession.set(call.sessionKey, model);
       this.sessionsByRun.set(call.runId, call.sessionKey);
     }
   }
@@ -54,10 +56,15 @@ export class ModelAttribution {
   }
 
   endSession(sessionKey: string | undefined): void {
-    if (sessionKey === undefined) {
-      return;
+    if (sessionKey !== undefined) {
+      this.evictSession(sessionKey);
     }
-    this.evictSession(sessionKey);
+  }
+
+  clear(): void {
+    this.modelsByRun.clear();
+    this.modelsBySession.clear();
+    this.sessionsByRun.clear();
   }
 
   private evictSession(sessionKey: string): void {
@@ -69,10 +76,13 @@ export class ModelAttribution {
       }
     }
   }
+}
 
-  clear(): void {
-    this.modelsByRun.clear();
-    this.modelsBySession.clear();
-    this.sessionsByRun.clear();
+export function formatModel(provider: string | undefined, model: string): string {
+  const normalizedModel = model.trim();
+  const normalizedProvider = provider?.trim();
+  if (!normalizedProvider || normalizedModel.includes("/")) {
+    return normalizedModel;
   }
+  return `${normalizedProvider}/${normalizedModel}`;
 }

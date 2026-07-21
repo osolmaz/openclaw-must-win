@@ -1,14 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { ModelAttribution } from "../src/model-attribution.js";
+import { formatModel, ModelAttribution } from "../src/model-attribution.js";
 
 describe("ModelAttribution", () => {
+  it("formats provider-qualified model names", () => {
+    expect(formatModel("openai", "gpt-5.6-sol")).toBe("openai/gpt-5.6-sol");
+    expect(formatModel("openai", "openai/gpt-5.6-sol")).toBe("openai/gpt-5.6-sol");
+    expect(formatModel(undefined, "model")).toBe("model");
+  });
+
   it("resolves the current model by run before session", () => {
     const models = new ModelAttribution();
-    models.record({ model: "model-a", runId: "run-a", sessionKey: "session" });
+    models.record({
+      model: "model-a",
+      provider: "provider",
+      runId: "run-a",
+      sessionKey: "session",
+    });
     models.record({ model: "model-b", runId: "run-b", sessionKey: "session" });
     models.record({ model: "model-a-updated", runId: "run-a" });
 
     expect(models.resolve({ runId: "run-a", sessionKey: "session" })).toBe("model-a-updated");
+    expect(models.resolve({ runId: "missing", sessionKey: "missing" })).toBeUndefined();
     expect(models.resolve({ runId: "run-b", sessionKey: "session" })).toBe("model-b");
     expect(models.resolve({ runId: "missing", sessionKey: "session" })).toBe("model-b");
   });

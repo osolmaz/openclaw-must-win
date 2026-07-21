@@ -1,7 +1,7 @@
 {
   "id": "openclaw-must-win",
   "name": "OpenClaw Must Win",
-  "description": "Attributes Git commits created through OpenClaw to the active model and OpenClaw runtime.",
+  "description": "Attributes Git commits created by OpenClaw processes to the active model and runtime.",
   "version": "0.1.0",
   "activation": {
     "onStartup": true,
@@ -10,6 +10,13 @@
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
-    "properties": {}
+    "properties": {
+      "mode": {
+        "type": "string",
+        "enum": ["required", "best-effort"],
+        "default": "required",
+        "description": "Whether ambiguous OpenClaw commit attribution blocks the commit."
+      }
+    }
   }
 }

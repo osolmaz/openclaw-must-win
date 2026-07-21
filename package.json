@@ -1,7 +1,7 @@
 {
   "name": "openclaw-must-win",
   "version": "0.1.0",
-  "description": "Attribute Git commits created through OpenClaw to the active model and OpenClaw runtime.",
+  "description": "Attribute Git commits created by OpenClaw processes to the active model and runtime.",
   "type": "module",
   "license": "MIT",
   "author": "Onur Solmaz",
@@ -18,10 +18,14 @@
   },
   "files": [
     "dist",
+    "docs",
     "LICENSE",
     "openclaw.plugin.json",
     "README.md"
   ],
+  "bin": {
+    "openclaw-must-win": "./dist/cli.js"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

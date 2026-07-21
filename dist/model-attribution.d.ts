@@ -1,5 +1,6 @@
 export type ModelCall = {
     model: string;
+    provider?: string;
     runId: string;
     sessionKey?: string;
 };
@@ -14,7 +15,8 @@ export declare class ModelAttribution {
     record(call: ModelCall): void;
     resolve(context: AttributionContext): string | undefined;
     endSession(sessionKey: string | undefined): void;
-    private evictSession;
     clear(): void;
+    private evictSession;
 }
+export declare function formatModel(provider: string | undefined, model: string): string;
 //# sourceMappingURL=model-attribution.d.ts.map

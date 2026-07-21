@@ -4,12 +4,15 @@ export default defineConfig({
   test: {
     coverage: {
       include: [
-        "src/commit-attribution.ts",
         "src/commit-trailers.ts",
-        "src/exec-policy.ts",
-        "src/git-commit-command.ts",
+        "src/configured-model.ts",
+        "src/context-store.ts",
+        "src/git-hook-runner.ts",
+        "src/git-hooks.ts",
+        "src/installer.ts",
         "src/model-attribution.ts",
-        "src/tool-attribution.ts",
+        "src/paths.ts",
+        "src/process-origin.ts",
       ],
       provider: "v8",
       reporter: ["text", "json", "json-summary"],
