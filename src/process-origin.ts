@@ -2,10 +2,6 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 
-export const EXECUTION_ID_ENV = "OPENCLAW_MUST_WIN_EXECUTION_ID";
-
-const EXECUTION_ID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const POSIX_SHELLS = new Set(["ash", "bash", "dash", "fish", "ksh", "sh", "zsh"]);
 
 export type ProcessIdentity = {
@@ -15,7 +11,6 @@ export type ProcessIdentity = {
 
 export type ProcessSnapshot = {
   commandHashes: ReadonlySet<string>;
-  executionIds: ReadonlySet<string>;
   identity: ProcessIdentity;
 };
 
@@ -79,7 +74,6 @@ export function readProcessSnapshot(
 
 function collectProcessEvidence(pid: number, readFile: typeof readFileSync) {
   const commandHashes = new Set<string>();
-  const executionIds = new Set<string>();
   const visited = new Set<number>();
   let currentPid = pid;
   for (let depth = 0; depth < 64; depth += 1) {
@@ -92,20 +86,15 @@ function collectProcessEvidence(pid: number, readFile: typeof readFileSync) {
       if (argv.length > 0) {
         commandHashes.add(hashCommand(argv.join(" ")));
       }
-      const shellPayload = readShellCommandPayload(argv);
-      if (shellPayload !== undefined) {
-        commandHashes.add(hashCommand(shellPayload));
-      }
-      const executionId = readExecutionId(currentPid, readFile);
-      if (executionId !== undefined) {
-        executionIds.add(executionId);
+      for (const payload of readProcessPayloads(argv)) {
+        commandHashes.add(hashCommand(payload));
       }
       currentPid = readParentPid(readFile(`/proc/${String(currentPid)}/stat`, "utf8"));
     } catch {
       break;
     }
   }
-  return { commandHashes, executionIds };
+  return { commandHashes };
 }
 
 function readProcessArguments(pid: number, readFile: typeof readFileSync): string[] {
@@ -115,29 +104,25 @@ function readProcessArguments(pid: number, readFile: typeof readFileSync): strin
     .filter(Boolean);
 }
 
-function readShellCommandPayload(argv: string[]): string | undefined {
-  if (argv.length < 3 || !POSIX_SHELLS.has(basename(argv[0] ?? ""))) {
-    return undefined;
+function readProcessPayloads(argv: string[]): string[] {
+  if (argv.length < 2 || !POSIX_SHELLS.has(basename(argv[0] ?? ""))) {
+    return [];
   }
+  const payload = readShellCommand(argv) ?? readInterpreterScript(argv);
+  return payload === undefined ? [] : [payload];
+}
+
+function readShellCommand(argv: string[]): string | undefined {
   const commandFlagIndex = argv.findIndex(
     (argument, index) => index > 0 && /^-[^-]*c[^-]*$/u.test(argument),
   );
-  const payload = commandFlagIndex < 0 ? undefined : argv[commandFlagIndex + 1];
-  return payload?.trim() ? payload : undefined;
+  const command = commandFlagIndex < 0 ? undefined : argv[commandFlagIndex + 1];
+  return command?.trim() ? command : undefined;
 }
 
-function readExecutionId(pid: number, readFile: typeof readFileSync): string | undefined {
-  try {
-    const prefix = `${EXECUTION_ID_ENV}=`;
-    const entry = readFile(`/proc/${String(pid)}/environ`)
-      .toString("utf8")
-      .split("\0")
-      .find((value) => value.startsWith(prefix));
-    const value = entry?.slice(prefix.length);
-    return value && EXECUTION_ID_PATTERN.test(value) ? value : undefined;
-  } catch {
-    return undefined;
-  }
+function readInterpreterScript(argv: string[]): string | undefined {
+  const script = argv.find((argument, index) => index > 0 && !argument.startsWith("-"));
+  return script?.trim() ? script : undefined;
 }
 
 function normalizeCgroup(raw: string): string {

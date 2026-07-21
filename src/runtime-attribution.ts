@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
 import {
   AttributionContextStore,
@@ -8,12 +7,9 @@ import {
 import { resolveConfiguredModel } from "./configured-model.js";
 import { ModelAttribution } from "./model-attribution.js";
 import { resolveAttributionPaths } from "./paths.js";
-import { EXECUTION_ID_ENV, readProcessIdentity } from "./process-origin.js";
+import { readProcessIdentity } from "./process-origin.js";
 
 const GATEWAY_REFRESH_INTERVAL_MS = 60_000;
-const MAX_PENDING_EXECUTIONS_PER_SESSION = 16;
-const MAX_PENDING_SESSIONS = 1_024;
-const MAX_TRACKED_TOOL_CALLS = 2_048;
 
 type ToolEvent = {
   params: Record<string, unknown>;
@@ -31,9 +27,7 @@ type ToolContext = {
 
 export class RuntimeAttribution {
   private gateway: GatewayRecord | undefined;
-  private readonly executionIdsByToolCall = new Map<string, string>();
   private readonly models = new ModelAttribution();
-  private readonly pendingExecutionIds = new Map<string, string[]>();
   private refreshTimer: NodeJS.Timeout | undefined;
   private store: AttributionContextStore | undefined;
 
@@ -46,9 +40,6 @@ export class RuntimeAttribution {
     this.api.on("model_call_started", (event, context) => {
       this.recordModel(event, context.sessionKey);
     });
-    this.api.on("resolve_exec_env", (event, context) =>
-      this.resolveExecEnvironment(event, context),
-    );
     this.api.on("before_tool_call", (event, context) => {
       this.beforeTool(event, context);
     });
@@ -56,11 +47,7 @@ export class RuntimeAttribution {
       this.afterTool(event, context);
     });
     this.api.on("session_end", (event, context) => {
-      const sessionKey = event.sessionKey ?? context.sessionKey;
-      this.models.endSession(sessionKey);
-      if (sessionKey !== undefined) {
-        this.pendingExecutionIds.delete(sessionKey);
-      }
+      this.models.endSession(event.sessionKey ?? context.sessionKey);
     });
     this.api.on("gateway_stop", () => {
       this.stop();
@@ -78,60 +65,6 @@ export class RuntimeAttribution {
       runId: event.runId,
       ...(sessionKey === undefined ? {} : { sessionKey }),
     });
-  }
-
-  private resolveExecEnvironment(
-    event: { host: "gateway" | "node" | "sandbox"; sessionKey?: string },
-    context: ToolContext,
-  ): Record<string, string> | undefined {
-    const sessionKey = event.sessionKey ?? context.sessionKey;
-    if (process.platform !== "linux" || event.host !== "gateway" || sessionKey === undefined) {
-      return undefined;
-    }
-    if (!this.ensureStore()) {
-      return undefined;
-    }
-    const runId = context.runId;
-    const model = this.resolveModel(runId, { ...context, sessionKey });
-    if (model === undefined) {
-      return undefined;
-    }
-    const executionId = randomUUID();
-    if (!this.writeExecutionTicket(executionId, model, runId, sessionKey)) {
-      return undefined;
-    }
-    this.enqueueExecutionId(sessionKey, executionId);
-    return { [EXECUTION_ID_ENV]: executionId };
-  }
-
-  private enqueueExecutionId(sessionKey: string, executionId: string): void {
-    let pending = this.pendingExecutionIds.get(sessionKey);
-    if (pending === undefined) {
-      if (this.pendingExecutionIds.size >= MAX_PENDING_SESSIONS) {
-        const oldestSessionKey = this.pendingExecutionIds.keys().next().value;
-        if (oldestSessionKey !== undefined) {
-          this.pendingExecutionIds.delete(oldestSessionKey);
-        }
-      }
-      pending = [];
-      this.pendingExecutionIds.set(sessionKey, pending);
-    }
-    pending.push(executionId);
-    if (pending.length > MAX_PENDING_EXECUTIONS_PER_SESSION) {
-      pending.shift();
-    }
-  }
-
-  private consumeExecutionId(sessionKey: string | undefined): string | undefined {
-    if (sessionKey === undefined) {
-      return undefined;
-    }
-    const pending = this.pendingExecutionIds.get(sessionKey);
-    const executionId = pending?.shift();
-    if (pending?.length === 0) {
-      this.pendingExecutionIds.delete(sessionKey);
-    }
-    return executionId;
   }
 
   private beforeTool(event: ToolEvent, context: ToolContext): undefined {
@@ -152,27 +85,8 @@ export class RuntimeAttribution {
       this.api.logger.warn("openclaw-must-win: active model is unavailable");
       return undefined;
     }
-    const executionId = this.consumeExecutionId(context.sessionKey);
-    if (executionId === undefined) {
-      this.writeCommandTicket(command, model, event, context, runId);
-    } else {
-      this.trackExecutionForToolCall(event.toolCallId ?? context.toolCallId, executionId);
-    }
+    this.writeCommandTicket(command, model, event, context, runId);
     return undefined;
-  }
-
-  private trackExecutionForToolCall(toolCallId: string | undefined, executionId: string): void {
-    if (toolCallId === undefined) {
-      return;
-    }
-    this.executionIdsByToolCall.set(toolCallId, executionId);
-    if (this.executionIdsByToolCall.size <= MAX_TRACKED_TOOL_CALLS) {
-      return;
-    }
-    const oldestToolCallId = this.executionIdsByToolCall.keys().next().value;
-    if (oldestToolCallId !== undefined) {
-      this.executionIdsByToolCall.delete(oldestToolCallId);
-    }
   }
 
   private ensureStore(): boolean {
@@ -192,34 +106,6 @@ export class RuntimeAttribution {
         ...(context.sessionKey === undefined ? {} : { sessionKey: context.sessionKey }),
       })
     );
-  }
-
-  private writeExecutionTicket(
-    executionId: string,
-    model: string,
-    runId: string | undefined,
-    sessionKey: string,
-  ): boolean {
-    if (this.store === undefined || this.gateway === undefined) {
-      return false;
-    }
-    try {
-      this.gateway = this.store.refreshGateway(this.gateway);
-      this.store.recordTool({
-        command: `execution:${executionId}`,
-        executionId,
-        gateway: this.gateway,
-        model,
-        ...(runId === undefined ? {} : { runId }),
-        sessionKey,
-      });
-      return true;
-    } catch (error) {
-      this.api.logger.warn(
-        `openclaw-must-win: could not record execution ticket: ${formatError(error)}`,
-      );
-      return false;
-    }
   }
 
   private writeCommandTicket(
@@ -256,25 +142,9 @@ export class RuntimeAttribution {
       return;
     }
     try {
-      this.completeToolExecution(event.toolCallId ?? context.toolCallId);
+      this.store.completeTool(event.toolCallId ?? context.toolCallId, this.gateway.gatewayId);
     } catch {
       // Expiry pruning handles an incomplete ticket later.
-    }
-  }
-
-  private completeToolExecution(toolCallId: string | undefined): void {
-    if (this.store === undefined || this.gateway === undefined) {
-      return;
-    }
-    const executionId =
-      toolCallId === undefined ? undefined : this.executionIdsByToolCall.get(toolCallId);
-    if (toolCallId !== undefined) {
-      this.executionIdsByToolCall.delete(toolCallId);
-    }
-    if (executionId === undefined) {
-      this.store.completeTool(toolCallId, this.gateway.gatewayId);
-    } else {
-      this.store.completeExecution(executionId);
     }
   }
 
@@ -336,9 +206,7 @@ export class RuntimeAttribution {
     }
     this.gateway = undefined;
     this.store = undefined;
-    this.executionIdsByToolCall.clear();
     this.models.clear();
-    this.pendingExecutionIds.clear();
   }
 }
 

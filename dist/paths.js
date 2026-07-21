@@ -5,7 +5,7 @@ export function resolveAttributionPaths(environment = process.env, homeDirectory
     : undefined) {
     const dataHome = readNonEmpty(environment["XDG_DATA_HOME"]) ?? join(homeDirectory, ".local", "share");
     const stateHome = readNonEmpty(environment["XDG_STATE_HOME"]) ?? join(homeDirectory, ".local", "state");
-    const runtimeHome = readNonEmpty(environment["XDG_RUNTIME_DIR"]) ?? resolveDefaultRuntimeHome(stateHome, uid);
+    const runtimeHome = resolveDefaultRuntimeHome(stateHome, uid);
     const dataDirectory = resolvePinnedDirectory(environment, "OPENCLAW_MUST_WIN_DATA_DIRECTORY", join(dataHome, "openclaw-must-win"));
     const stateDirectory = resolvePinnedDirectory(environment, "OPENCLAW_MUST_WIN_STATE_DIRECTORY", join(stateHome, "openclaw-must-win"));
     const runtimeDirectory = resolvePinnedDirectory(environment, "OPENCLAW_MUST_WIN_RUNTIME_DIRECTORY", join(runtimeHome, "openclaw-must-win"));

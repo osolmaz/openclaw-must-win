@@ -18,9 +18,9 @@ session identifiers, tool-call identifier, working-directory hint, and a SHA-256
 command. Full command text is not written. `after_tool_call` marks the ticket complete and retains
 it for 30 minutes so an inheriting background process can still be attributed.
 
-Files live under `$XDG_RUNTIME_DIR/openclaw-must-win` with user-only permissions. Writes use a
-temporary file and atomic rename. Expired records are removed during normal plugin and hook
-activity, and the ticket count is bounded.
+Files live under `/run/user/$UID/openclaw-must-win` with user-only permissions, independent of the
+Gateway process's XDG environment. Writes use a temporary file and atomic rename. Expired records
+are removed during normal plugin and hook activity, and the ticket count is bounded.
 
 ## Process matching
 

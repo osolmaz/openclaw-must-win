@@ -1,8 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
-export const EXECUTION_ID_ENV = "OPENCLAW_MUST_WIN_EXECUTION_ID";
-const EXECUTION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const POSIX_SHELLS = new Set(["ash", "bash", "dash", "fish", "ksh", "sh", "zsh"]);
 export function hashCommand(command) {
     return createHash("sha256").update(normalizeCommandFingerprint(command)).digest("hex");
@@ -46,7 +44,6 @@ export function readProcessSnapshot(pid = process.pid, readFile = readFileSync) 
 }
 function collectProcessEvidence(pid, readFile) {
     const commandHashes = new Set();
-    const executionIds = new Set();
     const visited = new Set();
     let currentPid = pid;
     for (let depth = 0; depth < 64; depth += 1) {
@@ -59,13 +56,8 @@ function collectProcessEvidence(pid, readFile) {
             if (argv.length > 0) {
                 commandHashes.add(hashCommand(argv.join(" ")));
             }
-            const shellPayload = readShellCommandPayload(argv);
-            if (shellPayload !== undefined) {
-                commandHashes.add(hashCommand(shellPayload));
-            }
-            const executionId = readExecutionId(currentPid, readFile);
-            if (executionId !== undefined) {
-                executionIds.add(executionId);
+            for (const payload of readProcessPayloads(argv)) {
+                commandHashes.add(hashCommand(payload));
             }
             currentPid = readParentPid(readFile(`/proc/${String(currentPid)}/stat`, "utf8"));
         }
@@ -73,7 +65,7 @@ function collectProcessEvidence(pid, readFile) {
             break;
         }
     }
-    return { commandHashes, executionIds };
+    return { commandHashes };
 }
 function readProcessArguments(pid, readFile) {
     return readFile(`/proc/${String(pid)}/cmdline`)
@@ -81,27 +73,21 @@ function readProcessArguments(pid, readFile) {
         .split("\0")
         .filter(Boolean);
 }
-function readShellCommandPayload(argv) {
-    if (argv.length < 3 || !POSIX_SHELLS.has(basename(argv[0] ?? ""))) {
-        return undefined;
+function readProcessPayloads(argv) {
+    if (argv.length < 2 || !POSIX_SHELLS.has(basename(argv[0] ?? ""))) {
+        return [];
     }
-    const commandFlagIndex = argv.findIndex((argument, index) => index > 0 && /^-[^-]*c[^-]*$/u.test(argument));
-    const payload = commandFlagIndex < 0 ? undefined : argv[commandFlagIndex + 1];
-    return payload?.trim() ? payload : undefined;
+    const payload = readShellCommand(argv) ?? readInterpreterScript(argv);
+    return payload === undefined ? [] : [payload];
 }
-function readExecutionId(pid, readFile) {
-    try {
-        const prefix = `${EXECUTION_ID_ENV}=`;
-        const entry = readFile(`/proc/${String(pid)}/environ`)
-            .toString("utf8")
-            .split("\0")
-            .find((value) => value.startsWith(prefix));
-        const value = entry?.slice(prefix.length);
-        return value && EXECUTION_ID_PATTERN.test(value) ? value : undefined;
-    }
-    catch {
-        return undefined;
-    }
+function readShellCommand(argv) {
+    const commandFlagIndex = argv.findIndex((argument, index) => index > 0 && /^-[^-]*c[^-]*$/u.test(argument));
+    const command = commandFlagIndex < 0 ? undefined : argv[commandFlagIndex + 1];
+    return command?.trim() ? command : undefined;
+}
+function readInterpreterScript(argv) {
+    const script = argv.find((argument, index) => index > 0 && !argument.startsWith("-"));
+    return script?.trim() ? script : undefined;
 }
 function normalizeCgroup(raw) {
     return raw

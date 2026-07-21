@@ -20,8 +20,9 @@ function createStore(nowValue = 1_000) {
   let now = nowValue;
   const paths = resolveAttributionPaths(
     {
+      OPENCLAW_MUST_WIN_RUNTIME_DIRECTORY: join(root, "runtime", "openclaw-must-win"),
       XDG_DATA_HOME: join(root, "data"),
-      XDG_RUNTIME_DIR: join(root, "runtime"),
+      XDG_RUNTIME_DIR: join(root, "ignored-runtime"),
       XDG_STATE_HOME: join(root, "state"),
     },
     root,
@@ -39,10 +40,9 @@ function createStore(nowValue = 1_000) {
 const identity = { bootId: "boot", cgroup: "0::/openclaw.service" };
 const unrelated = { bootId: "boot", cgroup: "0::/terminal.scope" };
 
-function snapshot(command?: string, currentIdentity = identity, executionId?: string) {
+function snapshot(command?: string, currentIdentity = identity) {
   return {
     commandHashes: new Set(command === undefined ? [] : [hashCommand(command)]),
-    executionIds: new Set(executionId === undefined ? [] : [executionId]),
     identity: currentIdentity,
   };
 }
@@ -58,7 +58,6 @@ describe("AttributionContextStore", () => {
     });
     const ticket = store.recordTool({
       command: "git commit -m test",
-      executionId: "123e4567-e89b-42d3-a456-426614174000",
       gateway,
       model: "openai/gpt-5.6-sol",
       runId: "run",
@@ -66,9 +65,7 @@ describe("AttributionContextStore", () => {
       toolCallId: "tool",
     });
 
-    expect(
-      store.resolve(snapshot(undefined, identity, "123e4567-e89b-42d3-a456-426614174000")),
-    ).toEqual({
+    expect(store.resolve(snapshot("git commit -m test", identity))).toEqual({
       origin: "openclaw",
       ticket,
     });
@@ -118,27 +115,6 @@ describe("AttributionContextStore lifecycle", () => {
     expect("ticket" in resolution && resolution.ticket.completedAt).toBe(2_000);
   });
 
-  it("completes execution tickets by execution identity", () => {
-    const context = createStore();
-    const gateway = context.store.registerGateway({
-      identity,
-      mode: "required",
-      openClawVersion: "1",
-    });
-    const executionId = "123e4567-e89b-42d3-a456-426614174000";
-    context.store.recordTool({
-      command: `execution:${executionId}`,
-      executionId,
-      gateway,
-      model: "model",
-    });
-    context.advance(1_000);
-    context.store.completeExecution(executionId);
-
-    const resolution = context.store.resolve(snapshot(undefined, identity, executionId));
-    expect("ticket" in resolution && resolution.ticket.completedAt).toBe(2_000);
-  });
-
   it("rejects missing and ambiguous required contexts", () => {
     const { store } = createStore();
     const gateway = store.registerGateway({
@@ -160,13 +136,6 @@ describe("AttributionContextStore lifecycle", () => {
       reason: "ambiguous",
     });
     expect(store.resolve(snapshot("different"))).toEqual({
-      mode: "required",
-      origin: "openclaw",
-      reason: "missing",
-    });
-    expect(
-      store.resolve(snapshot("same", identity, "123e4567-e89b-42d3-a456-426614174999")),
-    ).toEqual({
       mode: "required",
       origin: "openclaw",
       reason: "missing",
@@ -216,8 +185,6 @@ describe("AttributionContextStore lifecycle", () => {
     mkdirSync(join(context.paths.runtimeDirectory, "gateways"), { recursive: true });
     writeFileSync(join(context.paths.runtimeDirectory, "tickets", "bad.json"), "not json\n");
     writeFileSync(join(context.paths.runtimeDirectory, "gateways", "bad.json"), "{}\n");
-    context.store.completeExecution(undefined);
-    context.store.completeExecution("missing");
     context.store.completeTool(undefined, "gateway");
     context.store.completeTool("missing", "gateway");
     context.store.prune();

@@ -20,8 +20,9 @@ function fixture() {
   roots.push(root);
   const paths = resolveAttributionPaths(
     {
+      OPENCLAW_MUST_WIN_RUNTIME_DIRECTORY: join(root, "runtime", "openclaw-must-win"),
       XDG_DATA_HOME: join(root, "data"),
-      XDG_RUNTIME_DIR: join(root, "runtime"),
+      XDG_RUNTIME_DIR: join(root, "ignored-runtime"),
       XDG_STATE_HOME: join(root, "state"),
     },
     root,
@@ -32,7 +33,6 @@ function fixture() {
 
 const snapshot = {
   commandHashes: new Set<string>(),
-  executionIds: new Set<string>(),
   identity: { bootId: "boot", cgroup: "cgroup" },
 };
 const ticket = {

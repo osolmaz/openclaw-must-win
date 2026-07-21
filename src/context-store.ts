@@ -37,7 +37,6 @@ export type ExecutionTicket = {
   commandHash: string;
   completedAt?: number;
   expiresAt: number;
-  executionId?: string;
   gatewayId: string;
   mode: AttributionMode;
   model: string;
@@ -106,7 +105,6 @@ export class AttributionContextStore {
 
   recordTool(input: {
     command: string;
-    executionId?: string;
     gateway: GatewayRecord;
     model: string;
     runId?: string;
@@ -121,7 +119,6 @@ export class AttributionContextStore {
       cgroup: input.gateway.cgroup,
       commandHash: hashCommand(input.command),
       expiresAt: startedAt + ACTIVE_TICKET_TTL_MS,
-      ...(input.executionId === undefined ? {} : { executionId: input.executionId }),
       gatewayId: input.gateway.gatewayId,
       mode: input.gateway.mode,
       model: input.model,
@@ -146,18 +143,6 @@ export class AttributionContextStore {
     this.completeTicketPath(
       join(this.ticketsDirectory, `${ticketRecordId(gatewayId, toolCallId)}.json`),
     );
-  }
-
-  completeExecution(executionId: string | undefined): void {
-    if (executionId === undefined) {
-      return;
-    }
-    const matchingPath = this.listJsonFiles(this.ticketsDirectory).find(
-      (path) => this.readTicket(path)?.executionId === executionId,
-    );
-    if (matchingPath !== undefined) {
-      this.completeTicketPath(matchingPath);
-    }
   }
 
   private completeTicketPath(path: string): void {
@@ -191,13 +176,7 @@ export class AttributionContextStore {
       return { origin: "terminal" };
     }
 
-    const executionMatches = tickets.filter(
-      (ticket) => ticket.executionId !== undefined && snapshot.executionIds.has(ticket.executionId),
-    );
-    const commandMatches = tickets.filter((ticket) =>
-      snapshot.commandHashes.has(ticket.commandHash),
-    );
-    const matches = snapshot.executionIds.size > 0 ? executionMatches : commandMatches;
+    const matches = tickets.filter((ticket) => snapshot.commandHashes.has(ticket.commandHash));
     const activeMatches = matches.filter((ticket) => ticket.completedAt === undefined);
     const selected = selectUnique(activeMatches) ?? selectUnique(matches);
     if (selected !== undefined) {
@@ -343,11 +322,7 @@ function isExecutionTicket(value: unknown): value is ExecutionTicket {
       ["bootId", "cgroup", "commandHash", "gatewayId", "model", "openClawVersion", "ticketId"],
       ["startedAt", "expiresAt"],
     ) &&
-    hasOptionalFields(
-      value,
-      ["executionId", "runId", "sessionKey", "toolCallId", "workdir"],
-      ["completedAt"],
-    ) &&
+    hasOptionalFields(value, ["runId", "sessionKey", "toolCallId", "workdir"], ["completedAt"]) &&
     isMode(value["mode"])
   );
 }

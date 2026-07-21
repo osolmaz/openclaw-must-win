@@ -53,12 +53,10 @@ describe("process origin", () => {
     });
   });
 
-  it("collects full invocations, shell payloads, and execution ids", () => {
-    const executionId = "123e4567-e89b-42d3-a456-426614174000";
+  it("collects full invocations and shell payloads", () => {
     const readFile = fakeReader({
       "/proc/7/cgroup": "0::/openclaw.service\n",
       "/proc/7/cmdline": Buffer.from("node\0hook.js\0"),
-      "/proc/7/environ": Buffer.from(`PATH=/bin\0OPENCLAW_MUST_WIN_EXECUTION_ID=${executionId}\0`),
       "/proc/7/stat": stat(7, 6),
       "/proc/6/cmdline": Buffer.from("git\0commit\0-m\0two words\0"),
       "/proc/6/stat": stat(6, 5),
@@ -71,8 +69,32 @@ describe("process origin", () => {
     expect(snapshot?.commandHashes.has(hashCommand('git commit -m "two words"'))).toBe(true);
     expect(snapshot?.commandHashes.has(hashCommand("git commit -m two words"))).toBe(true);
     expect(snapshot?.commandHashes.has(hashCommand("git"))).toBe(false);
-    expect(snapshot?.executionIds.has(executionId)).toBe(true);
     expect(snapshot?.identity.cgroup).toBe("0::/openclaw.service");
+  });
+
+  it("recognizes an interpreted script as a complete process payload", () => {
+    const readFile = fakeReader({
+      "/proc/7/cgroup": "0::/openclaw.service\n",
+      "/proc/7/cmdline": Buffer.from("dash\0/tmp/commit-later.sh\0"),
+      "/proc/7/stat": stat(7, 1),
+      "/proc/sys/kernel/random/boot_id": "boot-id\n",
+    });
+
+    const snapshot = readProcessSnapshot(7, readFile);
+    expect(snapshot?.commandHashes.has(hashCommand("/tmp/commit-later.sh"))).toBe(true);
+    expect(snapshot?.commandHashes.has(hashCommand("commit-later.sh"))).toBe(false);
+  });
+
+  it("does not invent a payload for interpreter options without a command", () => {
+    const readFile = fakeReader({
+      "/proc/7/cgroup": "0::/openclaw.service\n",
+      "/proc/7/cmdline": Buffer.from("bash\0-x\0"),
+      "/proc/7/stat": stat(7, 1),
+      "/proc/sys/kernel/random/boot_id": "boot-id\n",
+    });
+
+    const snapshot = readProcessSnapshot(7, readFile);
+    expect(snapshot?.commandHashes).toEqual(new Set([hashCommand("bash -x")]));
   });
 
   it("stops safely at unreadable and malformed ancestors", () => {

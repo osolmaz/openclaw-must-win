@@ -25,8 +25,9 @@ function fixture(initialHooksPath?: string) {
   const source = join(root, "source");
   const paths = resolveAttributionPaths(
     {
+      OPENCLAW_MUST_WIN_RUNTIME_DIRECTORY: join(root, "runtime", "openclaw-must-win"),
       XDG_DATA_HOME: join(root, "data"),
-      XDG_RUNTIME_DIR: join(root, "runtime"),
+      XDG_RUNTIME_DIR: join(root, "ignored-runtime"),
       XDG_STATE_HOME: join(root, "state"),
     },
     root,
