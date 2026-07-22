@@ -1,0 +1,135 @@
+name: Publish
+
+on:
+  release:
+    types: [published]
+
+concurrency:
+  group: publish-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  npm:
+    name: npm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22.19.0
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Update npm for trusted publishing
+        run: npm install --global npm@latest
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate release
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+
+          node - <<'NODE'
+          const { execFileSync } = require("node:child_process");
+          const { readFileSync } = require("node:fs");
+
+          const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+          const releaseTag = process.env.RELEASE_TAG ?? "";
+          const expectedTag = `v${pkg.version}`;
+          const errors = [];
+
+          if (pkg.name !== "openclaw-must-win") {
+            errors.push(
+              `package.json name must be openclaw-must-win; found ${pkg.name ?? "<missing>"}`,
+            );
+          }
+          if (pkg.private === true) {
+            errors.push("package.json must not be private.");
+          }
+          if (pkg.publishConfig?.access !== "public") {
+            errors.push("package.json publishConfig.access must be public.");
+          }
+          if (!/^v\d+\.\d+\.\d+$/.test(releaseTag)) {
+            errors.push(`release tag must match vX.Y.Z; found ${releaseTag || "<missing>"}`);
+          }
+          if (releaseTag !== expectedTag) {
+            errors.push(
+              `release tag ${releaseTag || "<missing>"} does not match package version ${pkg.version}; expected ${expectedTag}`,
+            );
+          }
+
+          if (errors.length > 0) {
+            for (const error of errors) console.error(error);
+            process.exit(1);
+          }
+
+          const releaseSha = execFileSync("git", ["rev-list", "-n", "1", releaseTag], {
+            encoding: "utf8",
+          }).trim();
+
+          try {
+            execFileSync("git", ["merge-base", "--is-ancestor", releaseSha, "origin/main"], {
+              stdio: "ignore",
+            });
+          } catch {
+            console.error(`tagged commit ${releaseSha} is not contained in origin/main`);
+            process.exit(1);
+          }
+
+          console.log(`${releaseTag} matches package.json and points to a commit on main.`);
+          NODE
+
+      - name: Ensure version is unpublished
+        run: |
+          set -euo pipefail
+          package_name="$(node -p "require('./package.json').name")"
+          package_version="$(node -p "require('./package.json').version")"
+          published_version="$(npm view "$package_name@$package_version" version 2>/dev/null || true)"
+
+          if [ "$published_version" = "$package_version" ]; then
+            echo "$package_name@$package_version is already published on npm."
+            exit 1
+          fi
+
+          echo "Publishing $package_name@$package_version"
+
+      - name: Run quality checks
+        run: npm run check
+
+      - name: Run mutation tests
+        run: npm run mutate
+
+      - name: Check patch formatting
+        run: git diff --check
+
+      - name: Publish to npm
+        run: npm publish --access public --provenance
+
+  clawhub:
+    name: ClawHub
+    needs: npm
+    permissions:
+      contents: read
+      id-token: write
+    uses: openclaw/clawhub/.github/workflows/package-publish.yml@v0.23.1
+    with:
+      source: osolmaz/openclaw-must-win
+      ref: ${{ github.event.release.tag_name }}
+      dry_run: false
+      owner: osolmaz
+      family: code-plugin
+    secrets:
+      clawhub_token: ${{ secrets.CLAWHUB_TOKEN }}
