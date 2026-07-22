@@ -25,11 +25,21 @@ receive OpenClaw trailers.
 ## Install
 
 Choose a version from the [releases page](https://github.com/osolmaz/openclaw-must-win/releases).
-Install the plugin from ClawHub, then install the user-level Git dispatcher from the npm package at
-the same version:
+Install the plugin from ClawHub:
 
 ```bash
 openclaw plugins install clawhub:openclaw-must-win@<version>
+```
+
+Or install the same version from npm:
+
+```bash
+openclaw plugins install npm:openclaw-must-win@<version>
+```
+
+Enable the plugin, then install and check the user-level Git dispatcher from the npm package:
+
+```bash
 openclaw plugins enable openclaw-must-win
 
 npm exec --yes \
